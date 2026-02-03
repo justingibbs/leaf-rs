@@ -13,6 +13,7 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
+globset = { workspace = true }
 dirs = "6"
 rusqlite = { workspace = true, optional = true }
 

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use leaf_core::Project;
-use tauri::State;
+use tauri::{AppHandle, State};
 use tracing::{debug, info};
 
 use crate::state::AppState;
@@ -17,8 +17,15 @@ pub struct RecentProjectInfo {
 }
 
 /// Create a new project at the given path
+///
+/// This will create the project directory if it doesn't exist,
+/// initialize the .leaf folder, and automatically start the file watcher.
 #[tauri::command]
-pub async fn create_project(path: String, state: State<'_, AppState>) -> Result<Project, String> {
+pub async fn create_project(
+    app: AppHandle,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<Project, String> {
     debug!("Creating project at: {}", path);
     let path = PathBuf::from(path);
 
@@ -27,16 +34,23 @@ pub async fn create_project(path: String, state: State<'_, AppState>) -> Result<
         std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     }
 
-    // Open/create the project
-    let project = state.open_project(path).map_err(|e| e.to_string())?;
+    // Open/create the project (watcher auto-starts per spec)
+    let project = state.open_project(path, app).map_err(|e| e.to_string())?;
     info!("Created project: {}", project.name);
 
     Ok(project)
 }
 
 /// Open an existing project
+///
+/// This will open the project and automatically start the file watcher
+/// per the spec's synchronization: `Project.open() -> Watcher.start()`.
 #[tauri::command]
-pub async fn open_project(path: String, state: State<'_, AppState>) -> Result<Project, String> {
+pub async fn open_project(
+    app: AppHandle,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<Project, String> {
     debug!("Opening project at: {}", path);
     let path = PathBuf::from(path);
 
@@ -44,7 +58,8 @@ pub async fn open_project(path: String, state: State<'_, AppState>) -> Result<Pr
         return Err(format!("Project path does not exist: {}", path.display()));
     }
 
-    let project = state.open_project(path).map_err(|e| e.to_string())?;
+    // Open project (watcher auto-starts per spec)
+    let project = state.open_project(path, app).map_err(|e| e.to_string())?;
     info!("Opened project: {}", project.name);
 
     Ok(project)
@@ -57,8 +72,16 @@ pub async fn get_current_project(state: State<'_, AppState>) -> Result<Option<Pr
 }
 
 /// Close the current project
+///
+/// This will stop the file watcher and close the project.
 #[tauri::command]
-pub async fn close_project(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn close_project(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // Stop the watcher first (per spec: Project.close() -> Watcher.stop())
+    let _ = state.stop_watcher(app);
+
     state.close_project().map_err(|e| e.to_string())?;
     info!("Project closed");
     Ok(())

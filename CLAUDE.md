@@ -8,12 +8,12 @@ This is a **Rust rewrite** of the original Python LEAF, targeting a single downl
 
 ## Current Status
 
-**Phase 1: Foundation** — Setting up Rust workspace and Tauri app.
+**Phase 2: File Watching & Events** — Complete. Ready for Phase 3.
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 1 | 🔲 In Progress | Foundation (Tauri app, core types, SQLite) |
-| 2 | 🔲 Pending | File Watching & Events |
+| 1 | ✅ Complete | Foundation (Tauri app, core types, SQLite) |
+| 2 | ✅ Complete | File Watching & Events |
 | 3 | 🔲 Pending | Cards & Triggers |
 | 4 | 🔲 Pending | Execution Engine (Deno sandbox) |
 | 5 | 🔲 Pending | LLM Agent (multi-provider) |
@@ -24,12 +24,36 @@ This is a **Rust rewrite** of the original Python LEAF, targeting a single downl
 
 | Document | Description |
 |----------|-------------|
+| [context/CONCEPTS.md](context/CONCEPTS.md) | **Concepts & Synchronizations** - READ FIRST for any implementation |
 | [context/RUST_REWRITE_PLAN.md](context/RUST_REWRITE_PLAN.md) | Full rewrite plan and architecture |
 | [context/LEAF_SPEC.md](context/LEAF_SPEC.md) | Original specification |
-| [context/CONCEPTS.md](context/CONCEPTS.md) | Core concepts |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design reference |
 | [docs/API.md](docs/API.md) | API design reference |
 | [docs/CARDS.md](docs/CARDS.md) | Cards guide |
+
+## Architectural Model: Concepts & Synchronizations
+
+LEAF uses the [Concepts & Synchronizations](https://essenceofsoftware.com/) model (Daniel Jackson, MIT). This is **mandatory reading** before implementing features.
+
+**Key principles:**
+1. **Concepts are independent** - Each concept (Project, Watcher, Card, Event, Execution) has its own state and actions, defined in isolation
+2. **Synchronizations coordinate** - Rules like `Project.open() → Watcher.start()` define how concepts interact
+3. **Triggers are self-evaluating** - Call `card.trigger.evaluate(event)` rather than external matching logic
+4. **Orchestration lives in leaf-app** - The Tauri app layer implements synchronization rules
+
+**Before implementing any feature:**
+1. Check which concepts are involved
+2. Review existing synchronization rules
+3. Add new sync rules if needed
+4. Ensure triggers evaluate themselves
+
+See [context/CONCEPTS.md](context/CONCEPTS.md) for full concept definitions, sync rules, and implementation guidance.
+
+**Currently implemented synchronizations:**
+- `Project.open() → Watcher.start()` - `leaf-app/src/state.rs:133`
+- `Project.close() → Watcher.stop()` - `leaf-app/src/commands/projects.rs:83`
+- `Watcher.detect() → Event.create()` - `leaf-app/src/events.rs:65`
+- `Event.create() → TriggerConfig.evaluate()` - `leaf-app/src/events.rs:108`
 
 ## Reference Implementation
 

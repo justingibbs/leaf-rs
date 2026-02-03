@@ -12,7 +12,7 @@ tauri-build = { workspace = true }
 [dependencies]
 leaf-core = { workspace = true }
 leaf-db = { workspace = true }
-# leaf-watcher = { workspace = true }  # TODO: Phase 2
+leaf-watcher = { workspace = true }
 # leaf-agent = { workspace = true }    # TODO: Phase 5
 # leaf-executor = { workspace = true } # TODO: Phase 4
 # leaf-mcp = { workspace = true }      # TODO: Phase 6
@@ -26,6 +26,8 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+globset = { workspace = true }
+mime_guess = { workspace = true }
 
 [lib]
 name = "leaf_app_lib"

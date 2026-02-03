@@ -376,6 +376,8 @@ Project.close()
 
 When a project opens, LEAF starts watching its folders and subscribes to its event queue. When it closes, everything stops cleanly.
 
+**Implementation:** `leaf-app/src/state.rs` - `AppState::open_project()` and `close_project()`
+
 ---
 
 ### File Watching → Events
@@ -392,6 +394,8 @@ Watcher.file_deleted(path)
 ```
 
 The Watcher detects filesystem changes and converts them into Events. This is the primary input to the system.
+
+**Implementation:** `leaf-watcher/src/watcher.rs` emits events, `leaf-app/src/events.rs` processes them
 
 ---
 
@@ -421,6 +425,10 @@ Event.emit(type="schedule.tick")
 ```
 
 When file events occur, LEAF checks all enabled Cards to see if their Triggers match. Matching triggers fire.
+
+**Key pattern: Self-evaluating triggers.** The trigger evaluates itself given an event via `trigger.evaluate(event)` rather than external code inspecting trigger internals. This keeps matching logic encapsulated.
+
+**Implementation:** `leaf-core/src/types.rs` - `TriggerConfig::evaluate()`, called from `leaf-app/src/events.rs`
 
 ---
 
@@ -598,3 +606,98 @@ Here's how the concepts and syncs work together for a typical use case:
 ```
 
 Every step is visible in the Event Queue. Every transition is an explicit synchronization.
+
+---
+
+## Implementation Status
+
+Track which synchronizations are implemented in the Rust codebase:
+
+| Synchronization | Status | Location |
+|-----------------|--------|----------|
+| Project.open → Watcher.start | ✅ | `leaf-app/src/state.rs:133` |
+| Project.close → Watcher.stop | ✅ | `leaf-app/src/commands/projects.rs:83` |
+| Watcher.detect → Event.create | ✅ | `leaf-app/src/events.rs:65` |
+| Event.create → Trigger.evaluate | ✅ | `leaf-app/src/events.rs:108` |
+| Trigger.fire → Execution.start | 🔲 | Phase 4 |
+| Execution → Sandbox | 🔲 | Phase 4 |
+| ChatSession → Agent | 🔲 | Phase 5 |
+| Agent → Card.create | 🔲 | Phase 5 |
+| Agent → MCP tools | 🔲 | Phase 6 |
+
+---
+
+## Adding New Features
+
+When implementing a new feature, follow this process:
+
+### 1. Identify Concepts
+
+Is this a new concept or does it extend existing ones?
+
+- **New concept**: Define its state, actions, and invariants in this document first
+- **Existing concept**: Add new state/actions to the existing definition
+
+### 2. Define Synchronizations
+
+How does this feature interact with other concepts?
+
+- Write the sync rules in pseudo-code first
+- Be explicit about the trigger and resulting actions
+- Consider error cases and what happens on failure
+
+### 3. Determine Implementation Location
+
+| Type | Location |
+|------|----------|
+| Concept state/actions | `leaf-core/src/types.rs` |
+| Database operations | `leaf-db/src/queries/` |
+| File watching | `leaf-watcher/src/` |
+| Synchronization orchestration | `leaf-app/src/` |
+| LLM interactions | `leaf-agent/src/` |
+| Code execution | `leaf-executor/src/` |
+
+### 4. Implement with Self-Evaluation
+
+For any matching/evaluation logic:
+- Put the logic **inside** the concept (e.g., `TriggerConfig::evaluate()`)
+- The orchestration layer calls the method, doesn't inspect internals
+- This keeps concepts encapsulated and testable
+
+### Example: Adding Schedule Triggers
+
+**1. Concept additions:**
+```
+Scheduler (new concept)
+  State: schedules: Vec<Schedule>, is_running: bool
+  Actions: start(), stop(), add_schedule(cron), remove_schedule(id)
+  Invariant: Only runs when a project is open
+```
+
+**2. Synchronization rules:**
+```
+Project.open() → Scheduler.start()
+Project.close() → Scheduler.stop()
+Scheduler.tick(schedule) → Event.create(Schedule, { schedule_id })
+TriggerConfig::Schedule.evaluate(event) → matches if schedule_id matches
+```
+
+**3. Implementation:**
+- Add `Scheduler` struct to `leaf-core`
+- Add schedule event handling to `leaf-app`
+- Extend `TriggerConfig::evaluate()` for schedule matching
+
+---
+
+## Implementation Checklist
+
+Before marking a feature complete, verify:
+
+- [ ] Concept state maps to struct fields
+- [ ] Concept actions map to methods
+- [ ] Invariants are enforced (compile-time or runtime checks)
+- [ ] Synchronizations are explicit in orchestration code (`leaf-app`)
+- [ ] Triggers use self-evaluation pattern (`trigger.evaluate(event)`)
+- [ ] Events flow: Detection → Creation → Matching → Processing → Completion
+- [ ] Implementation location added to "Implementation Status" table above
+- [ ] Tests cover both the concept in isolation and the synchronization

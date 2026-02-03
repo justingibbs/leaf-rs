@@ -10,7 +10,7 @@ pub mod error;
 pub mod events;
 pub mod types;
 
-pub use config::{AppConfig, ProjectConfig};
+pub use config::{AppConfig, ExecutionSettings, LlmSettings, ProjectConfig, RecentProject, WatchPath};
 pub use error::{LeafError, Result};
-pub use events::{EventBus, LeafEvent};
+pub use events::{EventBus, EventSubscription, LeafEvent};
 pub use types::*;
