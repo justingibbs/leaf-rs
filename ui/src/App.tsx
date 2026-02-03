@@ -1,14 +1,39 @@
+import { useState } from "react";
 import { useProjectStore } from "./stores/projectStore";
 import { ProjectPicker } from "./components/ProjectPicker";
 import { EventQueue } from "./components/EventQueue";
+import { CardList, CardEditor } from "./components/cards";
 import { useLeafEvents } from "./hooks/useLeafEvents";
+import type { Card } from "./types";
 import "./App.css";
 
 function App() {
   const { project, closeProject } = useProjectStore();
+  const [showCardEditor, setShowCardEditor] = useState(false);
+  const [editingCard, setEditingCard] = useState<Card | undefined>(undefined);
 
   // Subscribe to LEAF events from Rust
   useLeafEvents();
+
+  const handleCreateCard = () => {
+    setEditingCard(undefined);
+    setShowCardEditor(true);
+  };
+
+  const handleSelectCard = (card: Card) => {
+    setEditingCard(card);
+    setShowCardEditor(true);
+  };
+
+  const handleCardSaved = () => {
+    setShowCardEditor(false);
+    setEditingCard(undefined);
+  };
+
+  const handleCancelEdit = () => {
+    setShowCardEditor(false);
+    setEditingCard(undefined);
+  };
 
   if (!project) {
     return <ProjectPicker />;
@@ -35,26 +60,42 @@ function App() {
         </div>
       </header>
       <main className="p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
-          {/* Welcome card */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">
-              Welcome to LEAF
-            </h2>
-            <p className="text-gray-600">
-              Your project is ready. Configure watch paths in your project
-              settings to start monitoring for file changes.
-            </p>
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-500">
-                Project path:{" "}
-                <code className="text-gray-700">{project.path}</code>
-              </p>
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left column: Cards */}
+            <div className="space-y-6">
+              {showCardEditor ? (
+                <CardEditor
+                  card={editingCard}
+                  onSave={handleCardSaved}
+                  onCancel={handleCancelEdit}
+                />
+              ) : (
+                <CardList
+                  onSelectCard={handleSelectCard}
+                  onCreateCard={handleCreateCard}
+                />
+              )}
+
+              {/* Project info */}
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  Project Info
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Path:{" "}
+                  <code className="text-gray-700 bg-gray-100 px-1 rounded">
+                    {project.path}
+                  </code>
+                </p>
+              </div>
+            </div>
+
+            {/* Right column: Event Queue */}
+            <div>
+              <EventQueue />
             </div>
           </div>
-
-          {/* Event Queue */}
-          <EventQueue />
         </div>
       </main>
     </div>

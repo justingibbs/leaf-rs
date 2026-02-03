@@ -1,6 +1,14 @@
 // Tauri API wrapper for type-safe commands
 import { invoke } from "@tauri-apps/api/core";
-import type { Event, Project, RecentProjectInfo, WatchPath } from "../types";
+import type {
+  Card,
+  CreateCardInput,
+  Event,
+  Project,
+  RecentProjectInfo,
+  UpdateCardInput,
+  WatchPath,
+} from "../types";
 
 export const api = {
   // Project commands
@@ -42,12 +50,31 @@ export const api = {
 
   listPendingEvents: (): Promise<Event[]> => invoke("list_pending_events"),
 
-  // TODO: Add more commands as they're implemented in Rust
   // Card commands
-  // listCards: (): Promise<Card[]> => invoke("list_cards"),
-  // createCard: (name: string, description: string): Promise<Card> =>
-  //   invoke("create_card", { name, description }),
+  listCards: (): Promise<Card[]> => invoke("list_cards"),
 
+  getCard: (cardId: string): Promise<Card | null> =>
+    invoke("get_card", { cardId }),
+
+  createCard: (input: CreateCardInput): Promise<Card> =>
+    invoke("create_card", { input }),
+
+  updateCard: (cardId: string, input: UpdateCardInput): Promise<Card> =>
+    invoke("update_card", { cardId, input }),
+
+  deleteCard: (cardId: string): Promise<void> =>
+    invoke("delete_card", { cardId }),
+
+  enableCard: (cardId: string): Promise<Card> =>
+    invoke("enable_card", { cardId }),
+
+  disableCard: (cardId: string): Promise<Card> =>
+    invoke("disable_card", { cardId }),
+
+  triggerCard: (cardId: string): Promise<void> =>
+    invoke("trigger_card", { cardId }),
+
+  // TODO: Add more commands as they're implemented in Rust
   // Session commands
   // listSessions: (): Promise<ChatSession[]> => invoke("list_sessions"),
   // createSession: (title: string): Promise<ChatSession> =>

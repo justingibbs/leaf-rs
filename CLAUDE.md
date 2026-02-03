@@ -8,13 +8,13 @@ This is a **Rust rewrite** of the original Python LEAF, targeting a single downl
 
 ## Current Status
 
-**Phase 2: File Watching & Events** — Complete. Ready for Phase 3.
+**Phase 3: Cards & Triggers** — Complete. Ready for Phase 4.
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | 1 | ✅ Complete | Foundation (Tauri app, core types, SQLite) |
 | 2 | ✅ Complete | File Watching & Events |
-| 3 | 🔲 Pending | Cards & Triggers |
+| 3 | ✅ Complete | Cards & Triggers |
 | 4 | 🔲 Pending | Execution Engine (Deno sandbox) |
 | 5 | 🔲 Pending | LLM Agent (multi-provider) |
 | 6 | 🔲 Pending | MCP Integration |
@@ -54,6 +54,9 @@ See [context/CONCEPTS.md](context/CONCEPTS.md) for full concept definitions, syn
 - `Project.close() → Watcher.stop()` - `leaf-app/src/commands/projects.rs:83`
 - `Watcher.detect() → Event.create()` - `leaf-app/src/events.rs:65`
 - `Event.create() → TriggerConfig.evaluate()` - `leaf-app/src/events.rs:108`
+- `Card.create() → LeafEvent.CardCreated` - `leaf-app/src/commands/cards.rs`
+- `Card.update() → LeafEvent.CardUpdated` - `leaf-app/src/commands/cards.rs`
+- `Card.enable/disable() → LeafEvent.CardEnabled/Disabled` - `leaf-app/src/commands/cards.rs`
 
 ## Reference Implementation
 

@@ -619,6 +619,9 @@ Track which synchronizations are implemented in the Rust codebase:
 | Project.close → Watcher.stop | ✅ | `leaf-app/src/commands/projects.rs:83` |
 | Watcher.detect → Event.create | ✅ | `leaf-app/src/events.rs:65` |
 | Event.create → Trigger.evaluate | ✅ | `leaf-app/src/events.rs:108` |
+| Card CRUD → LeafEvent emission | ✅ | `leaf-app/src/commands/cards.rs` |
+| Card.enable/disable → LeafEvent | ✅ | `leaf-app/src/commands/cards.rs` |
+| Card.trigger (manual) | ✅ | `leaf-app/src/commands/cards.rs` |
 | Trigger.fire → Execution.start | 🔲 | Phase 4 |
 | Execution → Sandbox | 🔲 | Phase 4 |
 | ChatSession → Agent | 🔲 | Phase 5 |

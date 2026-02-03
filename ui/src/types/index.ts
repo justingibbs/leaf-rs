@@ -106,6 +106,23 @@ export interface ToolCall {
   result?: unknown;
 }
 
+// Input types for API calls
+export interface CreateCardInput {
+  name: string;
+  description: string;
+  trigger?: TriggerConfig;
+  program?: ProgramConfig;
+  session_id?: string;
+}
+
+export interface UpdateCardInput {
+  name?: string;
+  description?: string;
+  trigger?: TriggerConfig;
+  program?: ProgramConfig;
+  enabled?: boolean;
+}
+
 export interface RecentProjectInfo {
   name: string;
   path: string;
