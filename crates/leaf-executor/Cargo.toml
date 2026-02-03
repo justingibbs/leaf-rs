@@ -1,0 +1,16 @@
+[package]
+name = "leaf-executor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Sandboxed code execution for LEAF using Deno"
+
+[dependencies]
+leaf-core = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# TODO: Phase 4 - Add process management dependencies
+# which = "6"

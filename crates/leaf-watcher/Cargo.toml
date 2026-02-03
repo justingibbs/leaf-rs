@@ -1,0 +1,17 @@
+[package]
+name = "leaf-watcher"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "File system monitoring for LEAF"
+
+[dependencies]
+leaf-core = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# TODO: Phase 2 - Add notify crate for file watching
+# notify = "6"
+# globset = "0.4"

@@ -1,0 +1,35 @@
+[package]
+name = "leaf-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "LEAF desktop application built with Tauri"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+leaf-core = { workspace = true }
+leaf-db = { workspace = true }
+# leaf-watcher = { workspace = true }  # TODO: Phase 2
+# leaf-agent = { workspace = true }    # TODO: Phase 5
+# leaf-executor = { workspace = true } # TODO: Phase 4
+# leaf-mcp = { workspace = true }      # TODO: Phase 6
+
+tauri = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+[lib]
+name = "leaf_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dev-dependencies]
+tempfile = "3"

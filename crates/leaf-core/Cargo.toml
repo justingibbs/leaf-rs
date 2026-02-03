@@ -1,0 +1,24 @@
+[package]
+name = "leaf-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core types, traits, and utilities for LEAF"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+dirs = "6"
+rusqlite = { workspace = true, optional = true }
+
+[features]
+default = []
+database = ["rusqlite"]
+
+[dev-dependencies]
+tokio = { workspace = true }

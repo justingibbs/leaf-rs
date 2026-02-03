@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LEAF",
+  "version": "0.1.0",
+  "identifier": "com.leaf.app",
+  "build": {
+    "beforeDevCommand": { "script": "pnpm dev", "cwd": "../../ui" },
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": { "script": "pnpm build", "cwd": "../../ui" },
+    "frontendDist": "../../ui/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "LEAF",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
+  }
+}
