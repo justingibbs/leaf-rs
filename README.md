@@ -37,13 +37,28 @@ cd leaf-rs
 
 # Install frontend dependencies
 cd ui && pnpm install && cd ..
+```
 
-# Run in development mode
+#### Development Mode (Recommended for Testing)
+
+```bash
 cargo tauri dev
+```
 
-# Build for release
+This launches the app with hot reload - frontend changes update instantly. Best for development and testing.
+
+#### Build & Install DMG
+
+```bash
 cargo tauri build
 ```
+
+Then:
+1. Open `target/release/bundle/dmg/LEAF_0.1.0_aarch64.dmg`
+2. Drag LEAF to Applications
+3. **First launch**: Right-click → "Open" (required since unsigned)
+
+Use this for final testing or sharing with others.
 
 ## Quick Start
 

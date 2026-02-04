@@ -1,21 +1,30 @@
-import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useProjectStore } from "../stores/projectStore";
 import { useRecentProjects } from "../hooks/useProjects";
 
 export function ProjectPicker() {
-  const [path, setPath] = useState("");
   const { openProject, createProject, loading, error } = useProjectStore();
   const { data: recentProjects } = useRecentProjects();
 
-  const handleOpen = async () => {
-    if (path.trim()) {
-      await openProject(path.trim());
+  const handleBrowseAndOpen = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Open Existing Project",
+    });
+    if (selected && typeof selected === "string") {
+      await openProject(selected);
     }
   };
 
-  const handleCreate = async () => {
-    if (path.trim()) {
-      await createProject(path.trim());
+  const handleBrowseAndCreate = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Select Folder for New Project",
+    });
+    if (selected && typeof selected === "string") {
+      await createProject(selected);
     }
   };
 
@@ -33,24 +42,6 @@ export function ProjectPicker() {
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label
-              htmlFor="path"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Project Path
-            </label>
-            <input
-              id="path"
-              type="text"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              placeholder="/path/to/project"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-leaf-500 focus:border-transparent outline-none"
-              disabled={loading}
-            />
-          </div>
-
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-600">{error}</p>
@@ -59,20 +50,24 @@ export function ProjectPicker() {
 
           <div className="flex gap-3">
             <button
-              onClick={handleOpen}
-              disabled={loading || !path.trim()}
-              className="flex-1 px-4 py-2 bg-leaf-500 text-white rounded-lg hover:bg-leaf-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={handleBrowseAndOpen}
+              disabled={loading}
+              className="flex-1 px-4 py-3 bg-leaf-500 text-white rounded-lg hover:bg-leaf-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
             >
               {loading ? "Opening..." : "Open Project"}
             </button>
             <button
-              onClick={handleCreate}
-              disabled={loading || !path.trim()}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={handleBrowseAndCreate}
+              disabled={loading}
+              className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
             >
               {loading ? "Creating..." : "Create New"}
             </button>
           </div>
+
+          <p className="text-xs text-gray-500 text-center">
+            Open an existing LEAF project or create a new one in any folder
+          </p>
         </div>
 
         {recentProjects && recentProjects.length > 0 && (

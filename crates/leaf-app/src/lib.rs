@@ -25,6 +25,7 @@ pub fn run() {
     info!("Starting LEAF application");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_state = AppState::new()?;
             app.manage(app_state);

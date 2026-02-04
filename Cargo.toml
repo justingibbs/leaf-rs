@@ -53,6 +53,7 @@ dirs = "5"
 # Tauri
 tauri = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
 
 # Internal crates
 leaf-core = { path = "crates/leaf-core" }
