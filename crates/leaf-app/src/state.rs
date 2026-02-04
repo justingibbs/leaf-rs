@@ -54,12 +54,31 @@ impl WatcherHandle {
 impl AppState {
     /// Create a new application state
     pub fn new() -> Result<Self> {
-        let config = AppConfig::default();
+        let mut config = AppConfig::default();
 
         // Ensure data directory exists
         if !config.data_dir.exists() {
             std::fs::create_dir_all(&config.data_dir)?;
             debug!("Created data directory: {}", config.data_dir.display());
+        }
+
+        // Load config from disk if it exists
+        let config_path = config.data_dir.join("config.json");
+        if config_path.exists() {
+            match std::fs::read_to_string(&config_path) {
+                Ok(content) => match serde_json::from_str::<AppConfig>(&content) {
+                    Ok(loaded_config) => {
+                        info!("Loaded app config from {}", config_path.display());
+                        config = loaded_config;
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse app config, using defaults: {}", e);
+                    }
+                },
+                Err(e) => {
+                    warn!("Failed to read app config, using defaults: {}", e);
+                }
+            }
         }
 
         Ok(Self {

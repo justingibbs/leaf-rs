@@ -1,6 +1,8 @@
 // Tauri API wrapper for type-safe commands
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AppConfig,
+  AppConfigUpdate,
   Card,
   ChatSession,
   CreateCardInput,
@@ -12,6 +14,8 @@ import type {
   McpToolSummary,
   Message,
   Project,
+  ProjectConfig,
+  ProjectConfigUpdate,
   RecentProjectInfo,
   UpdateCardInput,
   WatchPath,
@@ -173,4 +177,16 @@ export const api = {
 
   testMcpServer: (serverId: string): Promise<McpServerStatus> =>
     invoke("test_mcp_server", { serverId }),
+
+  // Settings commands
+  getAppConfig: (): Promise<AppConfig> => invoke("get_app_config"),
+
+  updateAppConfig: (updates: AppConfigUpdate): Promise<AppConfig> =>
+    invoke("update_app_config", { updates }),
+
+  getProjectSettings: (): Promise<ProjectConfig> =>
+    invoke("get_project_settings"),
+
+  updateProjectSettings: (updates: ProjectConfigUpdate): Promise<ProjectConfig> =>
+    invoke("update_project_settings", { updates }),
 };

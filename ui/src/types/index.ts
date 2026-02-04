@@ -171,6 +171,55 @@ export interface McpServerStatus {
   tool_count: number;
 }
 
+// App configuration (from Rust AppConfig)
+export interface AppConfig {
+  dataDir: string;
+  logDir: string;
+  logLevel: string;
+  defaultLlmProvider: string;
+  theme: "light" | "dark" | "system";
+}
+
+// App config update input
+export interface AppConfigUpdate {
+  defaultLlmProvider?: string;
+  theme?: string;
+  logLevel?: string;
+}
+
+// LLM settings for a project
+export interface LlmSettings {
+  provider: string;
+  model: string;
+  api_key: string | null;
+  base_url: string | null;
+  temperature: number;
+  max_tokens: number;
+}
+
+// Execution settings for a project
+export interface ExecutionSettings {
+  timeout_secs: number;
+  max_retries: number;
+  allow_network: boolean;
+  deno_permissions: string[];
+}
+
+// Project configuration
+export interface ProjectConfig {
+  name: string;
+  watchPaths: WatchPath[];
+  llmSettings: LlmSettings;
+  executionSettings: ExecutionSettings;
+}
+
+// Project config update input
+export interface ProjectConfigUpdate {
+  name?: string;
+  llmSettings?: Partial<LlmSettings>;
+  executionSettings?: Partial<ExecutionSettings>;
+}
+
 // LEAF events emitted from Rust to frontend
 export type LeafEvent =
   | { type: "project_opened"; payload: Project }

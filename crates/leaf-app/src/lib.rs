@@ -83,6 +83,11 @@ pub fn run() {
             commands::mcp::disable_mcp_server,
             commands::mcp::list_mcp_tools,
             commands::mcp::test_mcp_server,
+            // Settings commands
+            commands::settings::get_app_config,
+            commands::settings::update_app_config,
+            commands::settings::get_project_settings,
+            commands::settings::update_project_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

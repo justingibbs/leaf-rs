@@ -5,6 +5,8 @@ import type { LeafEvent } from "../types";
 import { useEventStore } from "../stores/eventStore";
 import { useCardStore } from "../stores/cardStore";
 import { useExecutionStore } from "../stores/executionStore";
+import { useChatStore } from "../stores/chatStore";
+import { useMcpStore } from "../stores/mcpStore";
 
 /**
  * Hook that subscribes to LEAF events from the Rust backend
@@ -15,6 +17,18 @@ export function useLeafEvents() {
   const { addCard, updateCardInStore, removeCard, loadCards } = useCardStore();
   const { addExecution, updateExecution, updateExecutionStatus } =
     useExecutionStore();
+  const {
+    handleSessionCreated,
+    handleSessionUpdated,
+    handleMessageReceived,
+    handleAgentThinking,
+    handleAgentToolCall,
+  } = useChatStore();
+  const {
+    handleServerConnected,
+    handleServerDisconnected,
+    handleServerError,
+  } = useMcpStore();
 
   useEffect(() => {
     let unlistenFn: UnlistenFn | null = null;
@@ -132,6 +146,60 @@ export function useLeafEvents() {
             );
             break;
 
+          // Chat/Session events
+          case "session_created":
+            console.log("Session created:", leafEvent.payload.id);
+            handleSessionCreated(leafEvent.payload);
+            break;
+
+          case "session_updated":
+            console.log("Session updated:", leafEvent.payload.id);
+            handleSessionUpdated(leafEvent.payload);
+            break;
+
+          case "message_received":
+            console.log("Message received:", leafEvent.payload.id);
+            handleMessageReceived(leafEvent.payload);
+            break;
+
+          case "agent_thinking":
+            console.log("Agent thinking:", leafEvent.payload.session_id);
+            handleAgentThinking(leafEvent.payload.session_id);
+            break;
+
+          case "agent_tool_call":
+            console.log("Agent tool call:", leafEvent.payload.tool_name);
+            handleAgentToolCall(
+              leafEvent.payload.session_id,
+              leafEvent.payload.tool_name,
+              leafEvent.payload.arguments
+            );
+            break;
+
+          // MCP events
+          case "mcp_server_connected":
+            console.log("MCP server connected:", leafEvent.payload.server_name);
+            handleServerConnected(leafEvent.payload.server_id, leafEvent.payload.tool_count);
+            break;
+
+          case "mcp_server_disconnected":
+            console.log("MCP server disconnected:", leafEvent.payload.server_name);
+            handleServerDisconnected(leafEvent.payload.server_id);
+            break;
+
+          case "mcp_server_error":
+            console.error("MCP server error:", leafEvent.payload.server_name, leafEvent.payload.error);
+            handleServerError(leafEvent.payload.server_id, leafEvent.payload.error);
+            break;
+
+          case "mcp_tool_called":
+            console.log("MCP tool called:", leafEvent.payload.tool_name);
+            break;
+
+          case "mcp_tool_result":
+            console.log("MCP tool result:", leafEvent.payload.tool_name, leafEvent.payload.success);
+            break;
+
           default:
             // Handle other event types as needed
             console.log("Unhandled event type:", leafEvent);
@@ -156,5 +224,13 @@ export function useLeafEvents() {
     addExecution,
     updateExecution,
     updateExecutionStatus,
+    handleSessionCreated,
+    handleSessionUpdated,
+    handleMessageReceived,
+    handleAgentThinking,
+    handleAgentToolCall,
+    handleServerConnected,
+    handleServerDisconnected,
+    handleServerError,
   ]);
 }
