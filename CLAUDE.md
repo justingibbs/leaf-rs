@@ -8,15 +8,15 @@ This is a **Rust rewrite** of the original Python LEAF, targeting a single downl
 
 ## Current Status
 
-**Phase 3: Cards & Triggers** — Complete. Ready for Phase 4.
+**Phase 5: LLM Agent** — Complete. Ready for Phase 6.
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | 1 | ✅ Complete | Foundation (Tauri app, core types, SQLite) |
 | 2 | ✅ Complete | File Watching & Events |
 | 3 | ✅ Complete | Cards & Triggers |
-| 4 | 🔲 Pending | Execution Engine (Deno sandbox) |
-| 5 | 🔲 Pending | LLM Agent (multi-provider) |
+| 4 | ✅ Complete | Execution Engine (Deno sandbox) |
+| 5 | ✅ Complete | LLM Agent (multi-provider) |
 | 6 | 🔲 Pending | MCP Integration |
 | 7 | 🔲 Pending | Polish & Release |
 
@@ -57,6 +57,9 @@ See [context/CONCEPTS.md](context/CONCEPTS.md) for full concept definitions, syn
 - `Card.create() → LeafEvent.CardCreated` - `leaf-app/src/commands/cards.rs`
 - `Card.update() → LeafEvent.CardUpdated` - `leaf-app/src/commands/cards.rs`
 - `Card.enable/disable() → LeafEvent.CardEnabled/Disabled` - `leaf-app/src/commands/cards.rs`
+- `ChatSession CRUD → LeafEvent.Session*` - `leaf-app/src/commands/sessions.rs`
+- `ChatSession.send() → Agent.respond()` - `leaf-app/src/commands/chat.rs`
+- `Agent → Card.create` - `leaf-agent/src/tools/card.rs`
 
 ## Reference Implementation
 

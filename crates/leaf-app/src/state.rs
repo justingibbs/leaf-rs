@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use leaf_core::{AppConfig, LeafEvent, Project, ProjectConfig, Result, WatchPath};
 use leaf_db::Database;
+use leaf_executor::Executor;
 use leaf_watcher::{FileWatcher, WatchConfig, WatchEvent};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
@@ -28,6 +29,8 @@ pub struct OpenProject {
     pub path: PathBuf,
     /// File watcher for this project (if running)
     pub watcher: Option<WatcherHandle>,
+    /// Executor for running card programs (if Deno is available)
+    pub executor: Option<Executor>,
 }
 
 /// Handle to a running file watcher
@@ -105,6 +108,18 @@ impl AppState {
         // Create project
         let project = Project::new(&project_config.name, path.to_string_lossy().to_string());
 
+        // Initialize executor (if Deno is available)
+        let executor = match Executor::new() {
+            Ok(exec) => {
+                info!("Executor initialized: Deno at {}", exec.deno_path().display());
+                Some(exec)
+            }
+            Err(e) => {
+                warn!("Executor not available: {}. Card execution disabled.", e);
+                None
+            }
+        };
+
         // Store in state
         let open_project = OpenProject {
             project: project.clone(),
@@ -112,6 +127,7 @@ impl AppState {
             db,
             path,
             watcher: None,
+            executor,
         };
 
         let mut current = self
@@ -183,6 +199,29 @@ impl AppState {
         current
             .as_ref()
             .map(|p| p.db.clone())
+            .ok_or_else(|| leaf_core::LeafError::Other("No project open".to_string()))
+    }
+
+    /// Get the executor for the current project (if available)
+    pub fn get_executor(&self) -> Result<Option<Executor>> {
+        let current = self
+            .current_project
+            .read()
+            .map_err(|e| leaf_core::LeafError::Other(e.to_string()))?;
+        Ok(current
+            .as_ref()
+            .and_then(|p| p.executor.clone()))
+    }
+
+    /// Get the project path for the current project
+    pub fn get_project_path(&self) -> Result<PathBuf> {
+        let current = self
+            .current_project
+            .read()
+            .map_err(|e| leaf_core::LeafError::Other(e.to_string()))?;
+        current
+            .as_ref()
+            .map(|p| p.path.clone())
             .ok_or_else(|| leaf_core::LeafError::Other("No project open".to_string()))
     }
 

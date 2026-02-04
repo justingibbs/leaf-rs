@@ -624,9 +624,10 @@ Track which synchronizations are implemented in the Rust codebase:
 | Card.trigger (manual) | ✅ | `leaf-app/src/commands/cards.rs` |
 | Trigger.fire → Execution.start | 🔲 | Phase 4 |
 | Execution → Sandbox | 🔲 | Phase 4 |
-| ChatSession → Agent | 🔲 | Phase 5 |
-| Agent → Card.create | 🔲 | Phase 5 |
-| Agent → MCP tools | 🔲 | Phase 6 |
+| ChatSession CRUD → LeafEvent | ✅ | `leaf-app/src/commands/sessions.rs` |
+| ChatSession.send → Agent.respond | ✅ | `leaf-app/src/commands/chat.rs` |
+| Agent → Card.create | ✅ | `leaf-agent/src/tools/card.rs` |
+| Agent → MCP tools | 🔲 | Phase 6 (stub in `leaf-agent/src/tools/mcp.rs`) |
 
 ---
 

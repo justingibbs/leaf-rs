@@ -13,8 +13,8 @@ tauri-build = { workspace = true }
 leaf-core = { workspace = true }
 leaf-db = { workspace = true }
 leaf-watcher = { workspace = true }
-# leaf-agent = { workspace = true }    # TODO: Phase 5
-# leaf-executor = { workspace = true } # TODO: Phase 4
+leaf-agent = { workspace = true }
+leaf-executor = { workspace = true }
 # leaf-mcp = { workspace = true }      # TODO: Phase 6
 
 tauri = { workspace = true }

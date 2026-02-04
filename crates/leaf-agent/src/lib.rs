@@ -1,49 +1,38 @@
 //! LEAF Agent - LLM agent and code generation for LEAF
 //!
 //! This crate provides:
-//! - Multi-provider LLM abstraction (OpenAI, Anthropic, Google, Ollama)
+//! - Multi-provider LLM abstraction (Anthropic, OpenAI, Google, Ollama)
 //! - Tool system for agent capabilities
 //! - TypeScript code generation for cards
-//! - Conversation management
-//!
-//! # Phase 5 Implementation
-//!
-//! TODO: Implement the following:
-//! - LlmProvider trait for provider abstraction
-//! - Provider implementations (Anthropic, OpenAI, etc.)
-//! - Tool trait and built-in tools (create_card, update_card, etc.)
-//! - Agent struct for managing conversations
-//! - Code generation and validation
+//! - Agent orchestration and conversation management
 
-/// Placeholder for LLM provider trait
-pub trait LlmProvider: Send + Sync {
-    // TODO: Phase 5
-}
+pub mod agent;
+pub mod codegen;
+pub mod error;
+pub mod prompts;
+pub mod provider;
+pub mod tools;
 
-/// Placeholder for agent implementation
-pub struct Agent {
-    // TODO: Phase 5
-}
-
-impl Agent {
-    /// Create a new agent
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for Agent {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// Re-export main types
+pub use agent::{Agent, AgentBuilder, AgentContext};
+pub use codegen::generate_card_program;
+pub use error::{AgentError, AgentResult};
+pub use prompts::system_prompt;
+pub use provider::{
+    ChatChunk, ChatMessage, ChatResponse, ChatRole, ChatStream, ContentBlockType, LlmProvider,
+    ProviderConfig, ProviderType, StopReason, ToolCallRequest, ToolDefinition, ToolResult, Usage,
+    create_provider,
+};
+pub use tools::{Tool, ToolContext, ToolRegistry};
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_placeholder() {
-        let _agent = Agent::new();
+    fn test_exports() {
+        // Verify main types are exported
+        let _: fn() -> ProviderConfig = ProviderConfig::default;
+        let _: fn() -> ToolRegistry = ToolRegistry::new;
     }
 }

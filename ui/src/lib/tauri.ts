@@ -2,13 +2,23 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Card,
+  ChatSession,
   CreateCardInput,
   Event,
+  Execution,
+  Message,
   Project,
   RecentProjectInfo,
   UpdateCardInput,
   WatchPath,
 } from "../types";
+
+// Agent configuration for chat
+export interface AgentConfig {
+  api_key: string;
+  provider?: "anthropic" | "openai" | "google" | "ollama";
+  model?: string;
+}
 
 export const api = {
   // Project commands
@@ -71,12 +81,72 @@ export const api = {
   disableCard: (cardId: string): Promise<Card> =>
     invoke("disable_card", { cardId }),
 
-  triggerCard: (cardId: string): Promise<void> =>
+  triggerCard: (cardId: string): Promise<Execution> =>
     invoke("trigger_card", { cardId }),
 
-  // TODO: Add more commands as they're implemented in Rust
+  // Execution commands
+  listExecutions: (cardId?: string, limit?: number): Promise<Execution[]> =>
+    invoke("list_executions", { cardId, limit }),
+
+  getExecution: (executionId: string): Promise<Execution | null> =>
+    invoke("get_execution", { executionId }),
+
+  listExecutionsForEvent: (eventId: string): Promise<Execution[]> =>
+    invoke("list_executions_for_event", { eventId }),
+
   // Session commands
-  // listSessions: (): Promise<ChatSession[]> => invoke("list_sessions"),
-  // createSession: (title: string): Promise<ChatSession> =>
-  //   invoke("create_session", { title }),
+  listSessions: (): Promise<ChatSession[]> => invoke("list_sessions"),
+
+  listActiveSessions: (): Promise<ChatSession[]> =>
+    invoke("list_active_sessions"),
+
+  createSession: (title?: string): Promise<ChatSession> =>
+    invoke("create_session", { title }),
+
+  getSession: (sessionId: string): Promise<ChatSession | null> =>
+    invoke("get_session", { sessionId }),
+
+  updateSessionTitle: (sessionId: string, title: string): Promise<ChatSession> =>
+    invoke("update_session_title", { sessionId, title }),
+
+  archiveSession: (sessionId: string): Promise<ChatSession> =>
+    invoke("archive_session", { sessionId }),
+
+  unarchiveSession: (sessionId: string): Promise<ChatSession> =>
+    invoke("unarchive_session", { sessionId }),
+
+  deleteSession: (sessionId: string): Promise<void> =>
+    invoke("delete_session", { sessionId }),
+
+  // Chat commands
+  getMessages: (sessionId: string): Promise<Message[]> =>
+    invoke("get_messages", { sessionId }),
+
+  /**
+   * Send a message to the chat agent (streaming).
+   * Returns immediately with the user message.
+   * The agent response is emitted via Tauri events as it streams.
+   * Listen to "leaf-event" for:
+   * - agent_thinking: Agent is processing
+   * - message_received: Partial or complete message
+   * - agent_tool_call: Agent is calling a tool
+   * - error: An error occurred
+   */
+  sendMessage: (
+    sessionId: string,
+    content: string,
+    agentConfig: AgentConfig
+  ): Promise<Message> =>
+    invoke("send_message", { sessionId, content, agentConfig }),
+
+  /**
+   * Send a message and wait for the complete response (non-streaming).
+   * Useful for programmatic use.
+   */
+  sendMessageSync: (
+    sessionId: string,
+    content: string,
+    agentConfig: AgentConfig
+  ): Promise<Message> =>
+    invoke("send_message_sync", { sessionId, content, agentConfig }),
 };

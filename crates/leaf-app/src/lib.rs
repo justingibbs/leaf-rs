@@ -58,6 +58,23 @@ pub fn run() {
             commands::cards::enable_card,
             commands::cards::disable_card,
             commands::cards::trigger_card,
+            // Execution commands
+            commands::executions::list_executions,
+            commands::executions::get_execution,
+            commands::executions::list_executions_for_event,
+            // Session commands
+            commands::sessions::list_sessions,
+            commands::sessions::list_active_sessions,
+            commands::sessions::create_session,
+            commands::sessions::get_session,
+            commands::sessions::update_session_title,
+            commands::sessions::archive_session,
+            commands::sessions::unarchive_session,
+            commands::sessions::delete_session,
+            // Chat commands
+            commands::chat::get_messages,
+            commands::chat::send_message,
+            commands::chat::send_message_sync,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { LeafEvent } from "../types";
 import { useEventStore } from "../stores/eventStore";
 import { useCardStore } from "../stores/cardStore";
+import { useExecutionStore } from "../stores/executionStore";
 
 /**
  * Hook that subscribes to LEAF events from the Rust backend
@@ -12,6 +13,8 @@ import { useCardStore } from "../stores/cardStore";
 export function useLeafEvents() {
   const { addEvent, updateEventStatus } = useEventStore();
   const { addCard, updateCardInStore, removeCard, loadCards } = useCardStore();
+  const { addExecution, updateExecution, updateExecutionStatus } =
+    useExecutionStore();
 
   useEffect(() => {
     let unlistenFn: UnlistenFn | null = null;
@@ -102,6 +105,33 @@ export function useLeafEvents() {
             loadCards();
             break;
 
+          // Execution events
+          case "execution_started":
+            console.log("Execution started:", leafEvent.payload.id);
+            addExecution(leafEvent.payload);
+            break;
+
+          case "execution_progress":
+            console.log("Execution progress:", leafEvent.payload.execution_id);
+            updateExecution(leafEvent.payload.execution_id, {
+              stdout: leafEvent.payload.stdout,
+              stderr: leafEvent.payload.stderr,
+            });
+            break;
+
+          case "execution_completed":
+            console.log(
+              "Execution completed:",
+              leafEvent.payload.execution_id,
+              leafEvent.payload.status
+            );
+            updateExecutionStatus(
+              leafEvent.payload.execution_id,
+              leafEvent.payload.status,
+              leafEvent.payload.exit_code
+            );
+            break;
+
           default:
             // Handle other event types as needed
             console.log("Unhandled event type:", leafEvent);
@@ -116,5 +146,15 @@ export function useLeafEvents() {
         unlistenFn();
       }
     };
-  }, [addEvent, updateEventStatus]);
+  }, [
+    addEvent,
+    updateEventStatus,
+    addCard,
+    updateCardInStore,
+    removeCard,
+    loadCards,
+    addExecution,
+    updateExecution,
+    updateExecutionStatus,
+  ]);
 }
