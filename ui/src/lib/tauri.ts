@@ -4,8 +4,12 @@ import type {
   Card,
   ChatSession,
   CreateCardInput,
+  CreateMcpServerInput,
   Event,
   Execution,
+  McpServer,
+  McpServerStatus,
+  McpToolSummary,
   Message,
   Project,
   RecentProjectInfo,
@@ -149,4 +153,24 @@ export const api = {
     agentConfig: AgentConfig
   ): Promise<Message> =>
     invoke("send_message_sync", { sessionId, content, agentConfig }),
+
+  // MCP server commands
+  listMcpServers: (): Promise<McpServer[]> => invoke("list_mcp_servers"),
+
+  addMcpServer: (input: CreateMcpServerInput): Promise<McpServer> =>
+    invoke("add_mcp_server", { input }),
+
+  removeMcpServer: (serverId: string): Promise<void> =>
+    invoke("remove_mcp_server", { serverId }),
+
+  enableMcpServer: (serverId: string): Promise<McpServer> =>
+    invoke("enable_mcp_server", { serverId }),
+
+  disableMcpServer: (serverId: string): Promise<McpServer> =>
+    invoke("disable_mcp_server", { serverId }),
+
+  listMcpTools: (): Promise<McpToolSummary[]> => invoke("list_mcp_tools"),
+
+  testMcpServer: (serverId: string): Promise<McpServerStatus> =>
+    invoke("test_mcp_server", { serverId }),
 };

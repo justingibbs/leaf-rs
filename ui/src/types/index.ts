@@ -137,6 +137,40 @@ export interface WatchPath {
   debounce_ms: number;
 }
 
+// MCP server configuration
+export interface McpServer {
+  id: string;
+  project_id: string;
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  enabled: boolean;
+  created_at: string;
+}
+
+// Input for creating an MCP server
+export interface CreateMcpServerInput {
+  name: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+// MCP tool summary
+export interface McpToolSummary {
+  server_name: string;
+  server_id: string;
+  name: string;
+  description: string | null;
+}
+
+// MCP server connection status
+export interface McpServerStatus {
+  connected: boolean;
+  tool_count: number;
+}
+
 // LEAF events emitted from Rust to frontend
 export type LeafEvent =
   | { type: "project_opened"; payload: Project }
@@ -162,5 +196,12 @@ export type LeafEvent =
   | { type: "message_received"; payload: Message }
   | { type: "agent_thinking"; payload: { session_id: string } }
   | { type: "agent_tool_call"; payload: { session_id: string; tool_name: string; arguments: unknown } }
+  // MCP events
+  | { type: "mcp_server_connected"; payload: { server_id: string; server_name: string; tool_count: number } }
+  | { type: "mcp_server_disconnected"; payload: { server_id: string; server_name: string } }
+  | { type: "mcp_server_error"; payload: { server_id: string; server_name: string; error: string } }
+  | { type: "mcp_tool_called"; payload: { session_id: string; server_name: string; tool_name: string } }
+  | { type: "mcp_tool_result"; payload: { session_id: string; server_name: string; tool_name: string; success: boolean } }
+  // System events
   | { type: "error"; payload: { context: string; message: string } }
   | { type: "warning"; payload: { context: string; message: string } };

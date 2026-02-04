@@ -15,7 +15,7 @@ leaf-db = { workspace = true }
 leaf-watcher = { workspace = true }
 leaf-agent = { workspace = true }
 leaf-executor = { workspace = true }
-# leaf-mcp = { workspace = true }      # TODO: Phase 6
+leaf-mcp = { workspace = true }
 
 tauri = { workspace = true }
 tokio = { workspace = true }

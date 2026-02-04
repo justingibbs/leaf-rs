@@ -6,46 +6,54 @@
 //! - Resource access
 //! - Prompt templates
 //!
-//! # Phase 6 Implementation
+//! # Example
 //!
-//! TODO: Implement the following:
-//! - McpClient for connecting to MCP servers
-//! - Server registry management
-//! - Tool discovery via list_tools
-//! - Tool invocation via call_tool
-//! - Resource access via list_resources/read_resource
+//! ```no_run
+//! use leaf_mcp::McpClient;
+//! use leaf_core::McpServer;
+//! use uuid::Uuid;
+//!
+//! # async fn example() -> leaf_mcp::McpResult<()> {
+//! let client = McpClient::new();
+//!
+//! // Create server config
+//! let config = McpServer::new(
+//!     Uuid::new_v4(),
+//!     "filesystem",
+//!     "npx",
+//! );
+//!
+//! // Connect to server
+//! client.connect(config).await?;
+//!
+//! // List available tools
+//! let tools = client.list_all_tools().await;
+//! for tool in tools {
+//!     println!("Tool: {} - {:?}", tool.name, tool.description);
+//! }
+//!
+//! # Ok(())
+//! # }
+//! ```
 
-/// Placeholder for MCP client implementation
-pub struct McpClient {
-    // TODO: Phase 6
-}
+pub mod client;
+pub mod error;
+pub mod protocol;
+pub mod server;
+pub mod transport;
 
-impl McpClient {
-    /// Create a new MCP client
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for McpClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Placeholder for MCP tool
-#[derive(Debug, Clone)]
-pub struct McpTool {
-    pub name: String,
-    pub description: String,
-}
+// Re-export main types
+pub use client::{extract_text_content, McpClient, McpToolSummary};
+pub use error::{McpError, McpResult};
+pub use protocol::{McpToolInfo, ToolCallResult, ToolContent};
+pub use server::ServerProcess;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_placeholder() {
+    fn test_client_creation() {
         let _client = McpClient::new();
     }
 }

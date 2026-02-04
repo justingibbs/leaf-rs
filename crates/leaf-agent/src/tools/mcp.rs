@@ -1,10 +1,14 @@
 //! MCP (Model Context Protocol) tools for the LEAF agent
 //!
-//! These tools allow the agent to interact with MCP servers.
-//! This is a stub implementation for Phase 6.
+//! These tools allow the agent to interact with MCP servers,
+//! listing available tools and calling them.
 
 use async_trait::async_trait;
+use leaf_core::LeafEvent;
+use leaf_mcp::extract_text_content;
 use serde_json::Value;
+use tauri::Emitter;
+use tracing::{debug, info};
 
 use super::{Tool, ToolContext};
 use crate::error::{AgentError, AgentResult};
@@ -35,11 +39,59 @@ impl Tool for ListMcpToolsTool {
         )
     }
 
-    async fn execute(&self, _ctx: &ToolContext, _args: Value) -> AgentResult<Value> {
-        // Stub implementation - will be implemented in Phase 6
-        Err(AgentError::ToolError(
-            "MCP integration not yet implemented. This feature will be available in a future update.".to_string(),
-        ))
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> AgentResult<Value> {
+        let mcp_client = ctx.mcp_client.as_ref().ok_or_else(|| {
+            AgentError::ToolError("MCP client not available".to_string())
+        })?;
+
+        let server_name_filter = args
+            .get("server_name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let tools = mcp_client.list_all_tools().await;
+
+        // Filter by server name if specified
+        let filtered_tools: Vec<_> = if let Some(ref name) = server_name_filter {
+            tools.into_iter().filter(|t| &t.server_name == name).collect()
+        } else {
+            tools
+        };
+
+        if filtered_tools.is_empty() {
+            let msg = if let Some(name) = server_name_filter {
+                format!("No MCP tools available from server '{}'", name)
+            } else {
+                "No MCP tools available. No MCP servers are connected.".to_string()
+            };
+            return Ok(serde_json::json!({
+                "message": msg,
+                "tools": []
+            }));
+        }
+
+        // Format tools for display
+        let tool_list: Vec<Value> = filtered_tools
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "server": t.server_name,
+                    "name": t.name,
+                    "description": t.description.as_deref().unwrap_or("No description")
+                })
+            })
+            .collect();
+
+        info!(
+            "Listed {} MCP tools{}",
+            tool_list.len(),
+            server_name_filter.map(|n| format!(" from '{}'", n)).unwrap_or_default()
+        );
+
+        Ok(serde_json::json!({
+            "message": format!("Found {} MCP tools available", tool_list.len()),
+            "tools": tool_list
+        }))
     }
 }
 
@@ -78,11 +130,68 @@ impl Tool for CallMcpToolTool {
         })
     }
 
-    async fn execute(&self, _ctx: &ToolContext, _args: Value) -> AgentResult<Value> {
-        // Stub implementation - will be implemented in Phase 6
-        Err(AgentError::ToolError(
-            "MCP integration not yet implemented. This feature will be available in a future update.".to_string(),
-        ))
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> AgentResult<Value> {
+        let mcp_client = ctx.mcp_client.as_ref().ok_or_else(|| {
+            AgentError::ToolError("MCP client not available".to_string())
+        })?;
+
+        let server_name = args
+            .get("server_name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AgentError::InvalidToolCall("server_name is required".to_string()))?;
+
+        let tool_name = args
+            .get("tool_name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AgentError::InvalidToolCall("tool_name is required".to_string()))?;
+
+        let arguments = args.get("arguments").cloned();
+
+        debug!(
+            "Calling MCP tool '{}' on server '{}' with args: {:?}",
+            tool_name, server_name, arguments
+        );
+
+        // Emit tool call event
+        let _ = ctx.app_handle.emit(
+            "leaf-event",
+            &LeafEvent::McpToolCalled {
+                session_id: ctx.session_id,
+                server_name: server_name.to_string(),
+                tool_name: tool_name.to_string(),
+            },
+        );
+
+        // Call the tool
+        let result = mcp_client
+            .call_tool_by_server_name(server_name, tool_name, arguments)
+            .await
+            .map_err(|e| AgentError::ToolError(e.to_string()))?;
+
+        // Extract text content from result
+        let text_content = extract_text_content(&result);
+
+        // Emit result event
+        let _ = ctx.app_handle.emit(
+            "leaf-event",
+            &LeafEvent::McpToolResult {
+                session_id: ctx.session_id,
+                server_name: server_name.to_string(),
+                tool_name: tool_name.to_string(),
+                success: !result.is_error,
+            },
+        );
+
+        info!(
+            "MCP tool '{}' on server '{}' completed successfully",
+            tool_name, server_name
+        );
+
+        Ok(serde_json::json!({
+            "success": !result.is_error,
+            "content": text_content,
+            "raw_content": result.content
+        }))
     }
 }
 
@@ -108,5 +217,9 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&serde_json::json!("server_name")));
+        assert!(schema["required"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("tool_name")));
     }
 }

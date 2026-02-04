@@ -8,11 +8,10 @@ description = "MCP (Model Context Protocol) client for LEAF"
 
 [dependencies]
 leaf-core = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["process", "io-util", "sync", "time"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-
-# TODO: Phase 6 - Add MCP client dependencies
-# jsonrpc-core = "18"
+async-trait = "0.1"
+uuid = { workspace = true }

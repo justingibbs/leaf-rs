@@ -4,8 +4,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use leaf_core::{AppConfig, LeafEvent, Project, ProjectConfig, Result, WatchPath};
-use leaf_db::Database;
+use leaf_db::{Database, McpServerQueries};
 use leaf_executor::Executor;
+use leaf_mcp::McpClient;
 use leaf_watcher::{FileWatcher, WatchConfig, WatchEvent};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
@@ -31,6 +32,8 @@ pub struct OpenProject {
     pub watcher: Option<WatcherHandle>,
     /// Executor for running card programs (if Deno is available)
     pub executor: Option<Executor>,
+    /// MCP client for external tools
+    pub mcp_client: Option<Arc<McpClient>>,
 }
 
 /// Handle to a running file watcher
@@ -120,6 +123,10 @@ impl AppState {
             }
         };
 
+        // Initialize MCP client
+        let mcp_client = Arc::new(McpClient::new());
+        info!("MCP client initialized");
+
         // Store in state
         let open_project = OpenProject {
             project: project.clone(),
@@ -128,6 +135,7 @@ impl AppState {
             path,
             watcher: None,
             executor,
+            mcp_client: Some(mcp_client),
         };
 
         let mut current = self
@@ -142,8 +150,9 @@ impl AppState {
 
     /// Open a project and automatically start the file watcher
     ///
-    /// This implements the spec's synchronization rule:
-    /// `Project.open(id) -> Watcher.start(project.path)`
+    /// This implements the spec's synchronization rules:
+    /// - `Project.open(id) -> Watcher.start(project.path)`
+    /// - `Project.open(id) -> McpClient.connect_enabled_servers()`
     ///
     /// The watcher will monitor all paths configured in the project's watch_paths.
     pub fn open_project(&self, path: PathBuf, app_handle: AppHandle) -> Result<Project> {
@@ -151,7 +160,7 @@ impl AppState {
         let project = self.open_project_internal(path)?;
 
         // Then, start the watcher (per spec: Project.open -> Watcher.start)
-        match self.start_watcher(app_handle) {
+        match self.start_watcher(app_handle.clone()) {
             Ok(paths) => {
                 if paths.is_empty() {
                     info!("Project opened, no watch paths configured");
@@ -166,16 +175,113 @@ impl AppState {
             }
         }
 
+        // Connect enabled MCP servers (per spec: Project.open -> McpClient.connect_enabled_servers)
+        self.connect_enabled_mcp_servers(app_handle);
+
         Ok(project)
     }
 
+    /// Connect to all enabled MCP servers for the current project
+    fn connect_enabled_mcp_servers(&self, app_handle: AppHandle) {
+        let current = match self.current_project.read() {
+            Ok(c) => c,
+            Err(e) => {
+                error!("Failed to read project state: {}", e);
+                return;
+            }
+        };
+
+        let open_project = match current.as_ref() {
+            Some(p) => p,
+            None => return,
+        };
+
+        let mcp_client = match open_project.mcp_client.as_ref() {
+            Some(c) => Arc::clone(c),
+            None => return,
+        };
+
+        let servers = match open_project.db.list_enabled_mcp_servers(open_project.project.id) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Failed to list enabled MCP servers: {}", e);
+                return;
+            }
+        };
+
+        if servers.is_empty() {
+            debug!("No enabled MCP servers to connect");
+            return;
+        }
+
+        info!("Connecting to {} enabled MCP servers", servers.len());
+
+        // Spawn task to connect servers (can't block here)
+        let app_handle_clone = app_handle.clone();
+        tokio::spawn(async move {
+            for server in servers {
+                let server_name = server.name.clone();
+                let server_id = server.id;
+
+                match mcp_client.connect(server).await {
+                    Ok(()) => {
+                        let tool_count = mcp_client
+                            .get_server_status(server_id)
+                            .await
+                            .map(|(_, count)| count)
+                            .unwrap_or(0);
+
+                        info!(
+                            "Connected to MCP server '{}' with {} tools",
+                            server_name, tool_count
+                        );
+
+                        let _ = app_handle_clone.emit(
+                            "leaf-event",
+                            &LeafEvent::McpServerConnected {
+                                server_id,
+                                server_name,
+                                tool_count,
+                            },
+                        );
+                    }
+                    Err(e) => {
+                        warn!("Failed to connect to MCP server '{}': {}", server_name, e);
+                        let _ = app_handle_clone.emit(
+                            "leaf-event",
+                            &LeafEvent::McpServerError {
+                                server_id,
+                                server_name,
+                                error: e.to_string(),
+                            },
+                        );
+                    }
+                }
+            }
+        });
+    }
+
     /// Close the current project
+    ///
+    /// This implements the synchronization rules:
+    /// - `Project.close() -> Watcher.stop()`
+    /// - `Project.close() -> McpClient.disconnect_all()`
     pub fn close_project(&self) -> Result<()> {
         let mut current = self
             .current_project
             .write()
             .map_err(|e| leaf_core::LeafError::Other(e.to_string()))?;
         if let Some(project) = current.take() {
+            // Disconnect all MCP servers (if runtime available)
+            if let Some(ref mcp_client) = project.mcp_client {
+                let mcp_client = Arc::clone(mcp_client);
+                // Try to spawn async task, but don't fail if no runtime
+                if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                    handle.spawn(async move {
+                        mcp_client.disconnect_all().await;
+                    });
+                }
+            }
             info!("Closed project: {}", project.project.name);
         }
         Ok(())
@@ -223,6 +329,17 @@ impl AppState {
             .as_ref()
             .map(|p| p.path.clone())
             .ok_or_else(|| leaf_core::LeafError::Other("No project open".to_string()))
+    }
+
+    /// Get the MCP client for the current project (if available)
+    pub fn get_mcp_client(&self) -> Result<Option<Arc<McpClient>>> {
+        let current = self
+            .current_project
+            .read()
+            .map_err(|e| leaf_core::LeafError::Other(e.to_string()))?;
+        Ok(current
+            .as_ref()
+            .and_then(|p| p.mcp_client.clone()))
     }
 
     /// Start the file watcher for the current project

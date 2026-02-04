@@ -75,6 +75,14 @@ pub fn run() {
             commands::chat::get_messages,
             commands::chat::send_message,
             commands::chat::send_message_sync,
+            // MCP commands
+            commands::mcp::list_mcp_servers,
+            commands::mcp::add_mcp_server,
+            commands::mcp::remove_mcp_server,
+            commands::mcp::enable_mcp_server,
+            commands::mcp::disable_mcp_server,
+            commands::mcp::list_mcp_tools,
+            commands::mcp::test_mcp_server,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

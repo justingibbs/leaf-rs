@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use leaf_db::Database;
+use leaf_mcp::McpClient;
 use serde_json::Value;
 use tauri::AppHandle;
 use uuid::Uuid;
@@ -32,6 +33,8 @@ pub struct ToolContext {
     pub app_handle: AppHandle,
     /// Session ID for tracking
     pub session_id: Uuid,
+    /// MCP client for external tools
+    pub mcp_client: Option<Arc<McpClient>>,
 }
 
 impl ToolContext {
@@ -49,6 +52,26 @@ impl ToolContext {
             db,
             app_handle,
             session_id,
+            mcp_client: None,
+        }
+    }
+
+    /// Create a new tool context with MCP client
+    pub fn with_mcp_client(
+        project_path: PathBuf,
+        project_id: Uuid,
+        db: Database,
+        app_handle: AppHandle,
+        session_id: Uuid,
+        mcp_client: Arc<McpClient>,
+    ) -> Self {
+        Self {
+            project_path,
+            project_id,
+            db,
+            app_handle,
+            session_id,
+            mcp_client: Some(mcp_client),
         }
     }
 

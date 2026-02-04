@@ -78,6 +78,33 @@ pub enum LeafEvent {
         arguments: serde_json::Value,
     },
 
+    // MCP events
+    McpServerConnected {
+        server_id: Uuid,
+        server_name: String,
+        tool_count: usize,
+    },
+    McpServerDisconnected {
+        server_id: Uuid,
+        server_name: String,
+    },
+    McpServerError {
+        server_id: Uuid,
+        server_name: String,
+        error: String,
+    },
+    McpToolCalled {
+        session_id: Uuid,
+        server_name: String,
+        tool_name: String,
+    },
+    McpToolResult {
+        session_id: Uuid,
+        server_name: String,
+        tool_name: String,
+        success: bool,
+    },
+
     // System events
     Error {
         context: String,

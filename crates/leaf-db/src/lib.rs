@@ -86,6 +86,7 @@ impl Clone for Database {
 pub use queries::cards::CardQueries;
 pub use queries::events::EventQueries;
 pub use queries::executions::ExecutionQueries;
+pub use queries::mcp::McpServerQueries;
 pub use queries::messages::MessageQueries;
 pub use queries::sessions::SessionQueries;
 

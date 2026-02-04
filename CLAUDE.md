@@ -8,7 +8,7 @@ This is a **Rust rewrite** of the original Python LEAF, targeting a single downl
 
 ## Current Status
 
-**Phase 5: LLM Agent** — Complete. Ready for Phase 6.
+**Phase 6: MCP Integration** — Complete. Ready for Phase 7.
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -17,7 +17,7 @@ This is a **Rust rewrite** of the original Python LEAF, targeting a single downl
 | 3 | ✅ Complete | Cards & Triggers |
 | 4 | ✅ Complete | Execution Engine (Deno sandbox) |
 | 5 | ✅ Complete | LLM Agent (multi-provider) |
-| 6 | 🔲 Pending | MCP Integration |
+| 6 | ✅ Complete | MCP Integration |
 | 7 | 🔲 Pending | Polish & Release |
 
 ## Documentation
@@ -50,16 +50,21 @@ LEAF uses the [Concepts & Synchronizations](https://essenceofsoftware.com/) mode
 See [context/CONCEPTS.md](context/CONCEPTS.md) for full concept definitions, sync rules, and implementation guidance.
 
 **Currently implemented synchronizations:**
-- `Project.open() → Watcher.start()` - `leaf-app/src/state.rs:133`
-- `Project.close() → Watcher.stop()` - `leaf-app/src/commands/projects.rs:83`
-- `Watcher.detect() → Event.create()` - `leaf-app/src/events.rs:65`
-- `Event.create() → TriggerConfig.evaluate()` - `leaf-app/src/events.rs:108`
+- `Project.open() → Watcher.start()` - `leaf-app/src/state.rs`
+- `Project.open() → MCP.connect_enabled_servers()` - `leaf-app/src/state.rs`
+- `Project.close() → Watcher.stop()` - `leaf-app/src/commands/projects.rs`
+- `Project.close() → MCP.disconnect_all()` - `leaf-app/src/state.rs`
+- `Watcher.detect() → Event.create()` - `leaf-app/src/events.rs`
+- `Event.create() → TriggerConfig.evaluate()` - `leaf-app/src/events.rs`
 - `Card.create() → LeafEvent.CardCreated` - `leaf-app/src/commands/cards.rs`
 - `Card.update() → LeafEvent.CardUpdated` - `leaf-app/src/commands/cards.rs`
 - `Card.enable/disable() → LeafEvent.CardEnabled/Disabled` - `leaf-app/src/commands/cards.rs`
 - `ChatSession CRUD → LeafEvent.Session*` - `leaf-app/src/commands/sessions.rs`
 - `ChatSession.send() → Agent.respond()` - `leaf-app/src/commands/chat.rs`
 - `Agent → Card.create` - `leaf-agent/src/tools/card.rs`
+- `Agent.call_mcp_tool() → McpClient.call_tool()` - `leaf-agent/src/tools/mcp.rs`
+- `MCP.enable() → MCP.connect()` - `leaf-app/src/commands/mcp.rs`
+- `MCP.disable() → MCP.disconnect()` - `leaf-app/src/commands/mcp.rs`
 
 ## Reference Implementation
 

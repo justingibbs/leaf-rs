@@ -368,15 +368,17 @@ Synchronizations are explicit rules that describe how concepts interact. They ma
 Project.open(id)
   -> Watcher.start(project.path)
   -> Queue.subscribe(project.id)
+  -> MCP.connect_enabled_servers()
 
 Project.close()
   -> Watcher.stop()
   -> Queue.unsubscribe()
+  -> MCP.disconnect_all()
 ```
 
-When a project opens, LEAF starts watching its folders and subscribes to its event queue. When it closes, everything stops cleanly.
+When a project opens, LEAF starts watching its folders, subscribes to its event queue, and connects enabled MCP servers. When it closes, everything stops cleanly.
 
-**Implementation:** `leaf-app/src/state.rs` - `AppState::open_project()` and `close_project()`
+**Implementation:** `leaf-app/src/state.rs` - `AppState::open_project()`, `close_project()`, and `connect_enabled_mcp_servers()`
 
 ---
 
@@ -530,15 +532,41 @@ The ChatSession/Agent flow is how users create Cards through natural language. M
 ```
 Agent.needs_tool(tool_name, args)
   -> MCP.call_tool(server, tool_name, args)
+  -> Event.emit(type="mcp.tool_called", payload={session_id, server_name, tool_name})
 
 MCP.call_tool.success(result)
   -> Agent.receive_tool_result(result)
+  -> Event.emit(type="mcp.tool_result", payload={session_id, server_name, tool_name, success: true})
 
 MCP.call_tool.failure(error)
   -> Agent.receive_tool_error(error)
+  -> Event.emit(type="mcp.tool_result", payload={session_id, server_name, tool_name, success: false})
 ```
 
 The Agent can access external data through MCP servers. Tool calls are explicit and their results flow back to the Agent.
+
+**Implementation:** `leaf-agent/src/tools/mcp.rs`
+
+---
+
+### MCP Server Lifecycle
+
+```
+MCP.enable(server_id)
+  -> MCP.connect(server)
+  -> Event.emit(type="mcp.server_connected", payload={server_id, server_name, tool_count})
+
+MCP.disable(server_id)
+  -> MCP.disconnect(server_id)
+  -> Event.emit(type="mcp.server_disconnected", payload={server_id, server_name})
+
+MCP.connect.failure(error)
+  -> Event.emit(type="mcp.server_error", payload={server_id, server_name, error})
+```
+
+MCP servers are managed through enable/disable actions. Connection events allow the UI to show connection status.
+
+**Implementation:** `leaf-app/src/commands/mcp.rs` and `leaf-mcp/src/client.rs`
 
 ---
 
@@ -615,19 +643,24 @@ Track which synchronizations are implemented in the Rust codebase:
 
 | Synchronization | Status | Location |
 |-----------------|--------|----------|
-| Project.open → Watcher.start | ✅ | `leaf-app/src/state.rs:133` |
-| Project.close → Watcher.stop | ✅ | `leaf-app/src/commands/projects.rs:83` |
-| Watcher.detect → Event.create | ✅ | `leaf-app/src/events.rs:65` |
-| Event.create → Trigger.evaluate | ✅ | `leaf-app/src/events.rs:108` |
+| Project.open → Watcher.start | ✅ | `leaf-app/src/state.rs` |
+| Project.open → MCP.connect_enabled | ✅ | `leaf-app/src/state.rs` |
+| Project.close → Watcher.stop | ✅ | `leaf-app/src/commands/projects.rs` |
+| Project.close → MCP.disconnect_all | ✅ | `leaf-app/src/state.rs` |
+| Watcher.detect → Event.create | ✅ | `leaf-app/src/events.rs` |
+| Event.create → Trigger.evaluate | ✅ | `leaf-app/src/events.rs` |
 | Card CRUD → LeafEvent emission | ✅ | `leaf-app/src/commands/cards.rs` |
 | Card.enable/disable → LeafEvent | ✅ | `leaf-app/src/commands/cards.rs` |
 | Card.trigger (manual) | ✅ | `leaf-app/src/commands/cards.rs` |
-| Trigger.fire → Execution.start | 🔲 | Phase 4 |
-| Execution → Sandbox | 🔲 | Phase 4 |
+| Trigger.fire → Execution.start | ✅ | `leaf-app/src/events.rs` |
+| Execution → Sandbox | ✅ | `leaf-executor/src/lib.rs` |
 | ChatSession CRUD → LeafEvent | ✅ | `leaf-app/src/commands/sessions.rs` |
 | ChatSession.send → Agent.respond | ✅ | `leaf-app/src/commands/chat.rs` |
 | Agent → Card.create | ✅ | `leaf-agent/src/tools/card.rs` |
-| Agent → MCP tools | 🔲 | Phase 6 (stub in `leaf-agent/src/tools/mcp.rs`) |
+| Agent → MCP tools | ✅ | `leaf-agent/src/tools/mcp.rs` |
+| MCP.enable → MCP.connect | ✅ | `leaf-app/src/commands/mcp.rs` |
+| MCP.disable → MCP.disconnect | ✅ | `leaf-app/src/commands/mcp.rs` |
+| MCP CRUD → LeafEvent emission | ✅ | `leaf-app/src/commands/mcp.rs` |
 
 ---
 
