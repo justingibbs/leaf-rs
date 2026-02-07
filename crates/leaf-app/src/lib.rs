@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod events;
+pub mod execution;
 pub mod state;
 
 use state::AppState;

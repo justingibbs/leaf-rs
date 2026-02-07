@@ -226,14 +226,41 @@ pub async fn disable_card(
 }
 
 /// Trigger a card manually
-/// TODO: Phase C - rewrite with stack execution pipeline
+///
+/// Looks up the card's stack and runs the full stack execution pipeline.
 #[tauri::command]
 pub async fn trigger_card(
-    _app: AppHandle,
+    app_handle: AppHandle,
     state: State<'_, AppState>,
     card_id: String,
 ) -> Result<serde_json::Value, String> {
-    let _ = state;
-    let _ = card_id;
-    Err("Card trigger not yet implemented (Phase C)".to_string())
+    let db = state.get_db().map_err(|e| e.to_string())?;
+    let card_uuid = Uuid::parse_str(&card_id).map_err(|e| e.to_string())?;
+
+    let card = db
+        .get_card(card_uuid)
+        .map_err(|e| e.to_string())?
+        .ok_or("Card not found")?;
+
+    let executor = state
+        .get_executor()
+        .map_err(|e| e.to_string())?
+        .ok_or("Executor not available (Deno not found)")?;
+
+    let project_path = state.get_project_path().map_err(|e| e.to_string())?;
+
+    info!("Triggering card '{}' (stack {})", card.name, card.stack_id);
+
+    let stack_exec = crate::execution::run_stack(
+        card.stack_id,
+        None,
+        None,
+        &db,
+        &executor,
+        &app_handle,
+        &project_path,
+    )
+    .await?;
+
+    serde_json::to_value(&stack_exec).map_err(|e| e.to_string())
 }

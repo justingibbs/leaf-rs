@@ -420,13 +420,16 @@ impl AppState {
         }
 
         // Create and start the event processor
-        let processor = EventProcessor::new(
+        let mut processor = EventProcessor::new(
             event_rx,
             app_handle.clone(),
             open_project.project.id,
             open_project.db.clone(),
             open_project.path.clone(),
         );
+        if let Some(ref executor) = open_project.executor {
+            processor = processor.with_executor(executor.clone());
+        }
         let processor_handle = processor.start();
 
         // Emit watcher started event

@@ -1,18 +1,16 @@
 //! Event processing pipeline
 //!
 //! This module handles the flow of events from the file watcher through to
-//! trigger matching, database persistence, and UI notification.
-//!
-//! Phase A: Trigger matching and execution spawning are stubbed out.
-//! The watcher channel integration and event-to-DB pipeline are preserved.
+//! trigger matching, database persistence, execution, and UI notification.
 
 use leaf_core::{Event, EventPayload, EventStatus, EventType, LeafEvent};
 use leaf_db::{Database, EventQueries, StackQueries};
+use leaf_executor::Executor;
 use leaf_watcher::{WatchEvent, WatchEventKind};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Event processor that handles the lifecycle of file events
@@ -27,6 +25,8 @@ pub struct EventProcessor {
     db: Database,
     /// Project root path for resolving relative paths
     project_path: Arc<std::path::PathBuf>,
+    /// Executor for running card programs (if Deno is available)
+    executor: Option<Executor>,
 }
 
 impl EventProcessor {
@@ -38,16 +38,20 @@ impl EventProcessor {
         db: Database,
         project_path: std::path::PathBuf,
     ) -> Self {
-        // TODO: Phase C - re-add executor for stack execution
-        info!("Event processor created (execution stubbed for Phase A)");
-
         Self {
             event_rx,
             app_handle,
             project_id,
             db,
             project_path: Arc::new(project_path),
+            executor: None,
         }
+    }
+
+    /// Set the executor for running card programs
+    pub fn with_executor(mut self, executor: Executor) -> Self {
+        self.executor = Some(executor);
+        self
     }
 
     /// Start processing events
@@ -59,7 +63,7 @@ impl EventProcessor {
 
             while let Some(watch_event) = self.event_rx.recv().await {
                 if let Err(e) = self.process_event(watch_event).await {
-                    tracing::error!("Failed to process event: {}", e);
+                    error!("Failed to process event: {}", e);
                 }
             }
 
@@ -110,7 +114,7 @@ impl EventProcessor {
         // Create the LEAF event
         let mut event = Event::new(self.project_id, event_type.clone(), payload.clone());
 
-        // TODO: Phase C - Find matching stacks using TriggerConfig::evaluate
+        // Find matching stacks using TriggerConfig::evaluate
         let matched_stacks = self.find_matching_stacks(&event_type, &payload)?;
         event.matched_stacks = matched_stacks.clone();
 
@@ -128,7 +132,7 @@ impl EventProcessor {
         // Emit event created to UI
         self.emit_leaf_event(LeafEvent::EventCreated(event.clone()));
 
-        // If there are matched stacks, emit processing event
+        // If there are matched stacks, trigger executions
         if !matched_stacks.is_empty() {
             self.emit_leaf_event(LeafEvent::EventProcessing {
                 event_id: event.id,
@@ -140,17 +144,56 @@ impl EventProcessor {
                 .update_event_status(event.id, EventStatus::Processing)
                 .map_err(|e| format!("Failed to update event status: {}", e))?;
 
-            // TODO: Phase C - Trigger stack executions for each matched stack
-            warn!("Stack execution not yet implemented (Phase C) - {} stacks matched but not executed", matched_stacks.len());
+            // Trigger stack executions for each matched stack
+            let mut any_failed = false;
+            if let Some(ref executor) = self.executor {
+                for stack_id in &matched_stacks {
+                    match crate::execution::run_stack(
+                        *stack_id,
+                        Some(event.id),
+                        Some(&event),
+                        &self.db,
+                        executor,
+                        &self.app_handle,
+                        &self.project_path,
+                    )
+                    .await
+                    {
+                        Ok(exec) => {
+                            info!(
+                                "Stack execution {} completed: {:?}",
+                                exec.id, exec.status
+                            );
+                            if exec.status == leaf_core::ExecutionStatus::Failed {
+                                any_failed = true;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to run stack {}: {}", stack_id, e);
+                            any_failed = true;
+                        }
+                    }
+                }
+            } else {
+                warn!(
+                    "No executor available - {} stacks matched but not executed",
+                    matched_stacks.len()
+                );
+            }
 
-            // Mark as completed for now
+            let final_status = if any_failed {
+                EventStatus::Failed
+            } else {
+                EventStatus::Completed
+            };
+
             self.db
-                .update_event_status(event.id, EventStatus::Completed)
+                .update_event_status(event.id, final_status.clone())
                 .map_err(|e| format!("Failed to update event status: {}", e))?;
 
             self.emit_leaf_event(LeafEvent::EventCompleted {
                 event_id: event.id,
-                status: EventStatus::Completed,
+                status: final_status,
             });
         } else {
             // No matching stacks - mark as completed
