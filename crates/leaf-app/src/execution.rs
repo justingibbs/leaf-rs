@@ -4,14 +4,18 @@
 //! Creates StackExecution and CardExecution records and emits progress events.
 
 use chrono::Utc;
-use leaf_core::{CardExecution, Event, ExecutionStatus, LeafEvent, StackExecution};
-use leaf_db::{CardExecutionQueries, CardQueries, Database, StackExecutionQueries};
+use leaf_core::{
+    Artifact, ArtifactType, CardExecution, Event, ExecutionStatus, LeafEvent, StackExecution,
+};
+use leaf_db::{ArtifactQueries, CardExecutionQueries, CardQueries, Database, StackExecutionQueries, StackQueries};
 use leaf_executor::Executor;
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+use walkdir::WalkDir;
 
 /// Run a stack's execution pipeline.
 ///
@@ -38,6 +42,13 @@ pub async fn run_stack(
     if cards.is_empty() {
         return Err("Stack has no enabled cards".to_string());
     }
+
+    // Get the stack's project_id for artifact registration
+    let project_id = db
+        .get_stack(stack_id)
+        .map_err(|e| format!("Failed to get stack: {}", e))?
+        .map(|s| s.project_id)
+        .ok_or("Stack not found")?;
 
     // Create StackExecution record (status=Running)
     let mut stack_exec = StackExecution::new(stack_id, event_id, cards.len() as i32);
@@ -71,6 +82,9 @@ pub async fn run_stack(
             "Running card '{}' (position {}) in stack execution {}",
             card.name, card.position, stack_exec.id
         );
+
+        // Snapshot project files before execution (for artifact detection)
+        let before_snapshot = snapshot_project_files(project_path);
 
         // Run the card's program via the Deno executor
         match executor.execute(card, event, project_path).await {
@@ -125,6 +139,21 @@ pub async fn run_stack(
         // Update CardExecution in DB
         if let Err(e) = db.update_card_execution(&card_exec) {
             warn!("Failed to update card execution: {}", e);
+        }
+
+        // Detect artifacts created/modified by this card execution
+        if card_exec.status == ExecutionStatus::Success {
+            let after_snapshot = snapshot_project_files(project_path);
+            register_execution_artifacts(
+                &before_snapshot,
+                &after_snapshot,
+                project_id,
+                card.id,
+                stack_exec.id,
+                project_path,
+                db,
+                app_handle,
+            );
         }
 
         // Emit CardExecutionCompleted
@@ -188,5 +217,139 @@ pub async fn run_stack(
 fn emit(app_handle: &AppHandle, event: LeafEvent) {
     if let Err(e) = app_handle.emit("leaf-event", &event) {
         warn!("Failed to emit event: {}", e);
+    }
+}
+
+/// A snapshot of file modification times in the project directory
+type FileSnapshot = HashMap<String, u64>;
+
+/// Take a snapshot of all files in the project directory (relative paths → modification times).
+/// Skips the .leaf directory.
+fn snapshot_project_files(project_path: &Path) -> FileSnapshot {
+    let mut snapshot = HashMap::new();
+    for entry in WalkDir::new(project_path)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            !name.starts_with('.') || e.depth() == 0
+        })
+        .filter_map(|e| e.ok())
+    {
+        if entry.depth() == 0 || entry.path().is_dir() {
+            continue;
+        }
+        let relative = entry
+            .path()
+            .strip_prefix(project_path)
+            .unwrap_or(entry.path())
+            .to_string_lossy()
+            .to_string();
+        let modified = entry
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        snapshot.insert(relative, modified);
+    }
+    snapshot
+}
+
+/// Compare before/after snapshots and register new/modified files as artifacts.
+fn register_execution_artifacts(
+    before: &FileSnapshot,
+    after: &FileSnapshot,
+    project_id: Uuid,
+    card_id: Uuid,
+    stack_execution_id: Uuid,
+    project_path: &Path,
+    db: &Database,
+    app_handle: &AppHandle,
+) {
+    let created_by = format!("card:{}", card_id);
+
+    for (path, after_mtime) in after {
+        let is_new = !before.contains_key(path);
+        let is_modified = before.get(path).map(|t| t != after_mtime).unwrap_or(false);
+
+        if !is_new && !is_modified {
+            continue;
+        }
+
+        let full_path = project_path.join(path);
+        let filename = full_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        if is_new {
+            // Check if artifact already exists (maybe registered by watcher)
+            match db.get_artifact_by_path(project_id, path) {
+                Ok(Some(_)) => continue,
+                Ok(None) => {}
+                Err(e) => {
+                    warn!("Failed to check existing artifact: {}", e);
+                    continue;
+                }
+            }
+
+            let mut artifact =
+                Artifact::new(project_id, path, &filename, ArtifactType::File, &created_by);
+            artifact.created_by_execution_id = Some(stack_execution_id);
+            artifact.mime_type = mime_guess::from_path(&full_path)
+                .first()
+                .map(|m| m.to_string());
+            artifact.size_bytes = std::fs::metadata(&full_path).ok().map(|m| m.len() as i64);
+
+            if let Err(e) = db.create_artifact(&artifact) {
+                warn!("Failed to register execution artifact: {}", e);
+            } else {
+                debug!("Registered new execution artifact: {}", path);
+                emit(app_handle, LeafEvent::ArtifactCreated(artifact));
+            }
+        } else if is_modified {
+            // Update existing artifact
+            match db.get_artifact_by_path(project_id, path) {
+                Ok(Some(existing)) => {
+                    if let Err(e) = db.update_artifact_modified(project_id, path) {
+                        warn!("Failed to mark artifact modified: {}", e);
+                    } else {
+                        emit(
+                            app_handle,
+                            LeafEvent::ArtifactModified {
+                                artifact_id: existing.id,
+                            },
+                        );
+                    }
+                }
+                Ok(None) => {
+                    // Not yet tracked — register it
+                    let mut artifact = Artifact::new(
+                        project_id,
+                        path,
+                        &filename,
+                        ArtifactType::File,
+                        &created_by,
+                    );
+                    artifact.created_by_execution_id = Some(stack_execution_id);
+                    artifact.mime_type = mime_guess::from_path(&full_path)
+                        .first()
+                        .map(|m| m.to_string());
+                    artifact.size_bytes =
+                        std::fs::metadata(&full_path).ok().map(|m| m.len() as i64);
+
+                    if let Err(e) = db.create_artifact(&artifact) {
+                        warn!("Failed to register modified artifact: {}", e);
+                    } else {
+                        debug!("Registered modified execution artifact: {}", path);
+                        emit(app_handle, LeafEvent::ArtifactCreated(artifact));
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to check existing artifact: {}", e);
+                }
+            }
+        }
     }
 }

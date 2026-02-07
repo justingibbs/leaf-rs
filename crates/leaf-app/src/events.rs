@@ -3,10 +3,11 @@
 //! This module handles the flow of events from the file watcher through to
 //! trigger matching, database persistence, execution, and UI notification.
 
-use leaf_core::{Event, EventPayload, EventStatus, EventType, LeafEvent};
-use leaf_db::{Database, EventQueries, StackQueries};
+use leaf_core::{Artifact, ArtifactType, Event, EventPayload, EventStatus, EventType, LeafEvent};
+use leaf_db::{ArtifactQueries, Database, EventQueries, StackQueries};
 use leaf_executor::Executor;
 use leaf_watcher::{WatchEvent, WatchEventKind};
+use std::path::Path;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
@@ -103,6 +104,14 @@ impl EventProcessor {
         let mime_type = mime_guess::from_path(&watch_event.path)
             .first()
             .map(|m| m.to_string());
+
+        // Register artifact from file event
+        self.register_artifact_from_event(
+            &watch_event.path,
+            &event_type,
+            file_size,
+            mime_type.as_deref(),
+        );
 
         // Create the event payload
         let payload = EventPayload::File {
@@ -235,6 +244,119 @@ impl EventProcessor {
         }
 
         Ok(matched)
+    }
+
+    /// Register or update an artifact based on a file event
+    fn register_artifact_from_event(
+        &self,
+        file_path: &Path,
+        event_type: &EventType,
+        file_size: Option<u64>,
+        mime_type: Option<&str>,
+    ) {
+        let relative_path = file_path
+            .strip_prefix(self.project_path.as_ref())
+            .unwrap_or(file_path)
+            .to_string_lossy()
+            .to_string();
+
+        let filename = file_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        match event_type {
+            EventType::FileCreated => {
+                // Check if artifact already exists at this path
+                match self.db.get_artifact_by_path(self.project_id, &relative_path) {
+                    Ok(Some(existing)) => {
+                        // Already tracked — if it was deleted, mark as modified (re-created)
+                        if existing.status == leaf_core::ArtifactStatus::Deleted {
+                            if let Err(e) =
+                                self.db.update_artifact_modified(self.project_id, &relative_path)
+                            {
+                                warn!("Failed to update artifact for re-created file: {}", e);
+                            } else {
+                                self.emit_leaf_event(LeafEvent::ArtifactModified {
+                                    artifact_id: existing.id,
+                                });
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        let artifact_type = if file_path.is_dir() {
+                            ArtifactType::Directory
+                        } else {
+                            ArtifactType::File
+                        };
+
+                        let mut artifact = Artifact::new(
+                            self.project_id,
+                            &relative_path,
+                            &filename,
+                            artifact_type,
+                            "user",
+                        );
+                        artifact.mime_type = mime_type.map(|m| m.to_string());
+                        artifact.size_bytes = file_size.map(|s| s as i64);
+
+                        if let Err(e) = self.db.create_artifact(&artifact) {
+                            warn!("Failed to register artifact: {}", e);
+                        } else {
+                            debug!("Registered artifact: {}", relative_path);
+                            self.emit_leaf_event(LeafEvent::ArtifactCreated(artifact));
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to check existing artifact: {}", e);
+                    }
+                }
+            }
+            EventType::FileModified => {
+                match self.db.get_artifact_by_path(self.project_id, &relative_path) {
+                    Ok(Some(existing)) => {
+                        if let Err(e) =
+                            self.db.update_artifact_modified(self.project_id, &relative_path)
+                        {
+                            warn!("Failed to update artifact modified status: {}", e);
+                        } else {
+                            self.emit_leaf_event(LeafEvent::ArtifactModified {
+                                artifact_id: existing.id,
+                            });
+                        }
+                    }
+                    Ok(None) => {
+                        // File modified but not yet tracked — register it
+                        let artifact_type = if file_path.is_dir() {
+                            ArtifactType::Directory
+                        } else {
+                            ArtifactType::File
+                        };
+
+                        let mut artifact = Artifact::new(
+                            self.project_id,
+                            &relative_path,
+                            &filename,
+                            artifact_type,
+                            "user",
+                        );
+                        artifact.mime_type = mime_type.map(|m| m.to_string());
+                        artifact.size_bytes = file_size.map(|s| s as i64);
+
+                        if let Err(e) = self.db.create_artifact(&artifact) {
+                            warn!("Failed to register artifact on modify: {}", e);
+                        } else {
+                            debug!("Registered artifact on modify: {}", relative_path);
+                            self.emit_leaf_event(LeafEvent::ArtifactCreated(artifact));
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to check existing artifact: {}", e);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Emit a LEAF event to the frontend

@@ -470,7 +470,7 @@ pub struct Artifact {
     pub artifact_type: ArtifactType,
     pub mime_type: Option<String>,
     pub size_bytes: Option<i64>,
-    pub created_by: Uuid,
+    pub created_by: String,
     pub created_by_execution_id: Option<Uuid>,
     pub status: ArtifactStatus,
     pub created_at: DateTime<Utc>,
@@ -484,7 +484,7 @@ impl Artifact {
         path: impl Into<String>,
         filename: impl Into<String>,
         artifact_type: ArtifactType,
-        created_by: Uuid,
+        created_by: impl Into<String>,
     ) -> Self {
         let now = Utc::now();
         Self {
@@ -495,7 +495,7 @@ impl Artifact {
             artifact_type,
             mime_type: None,
             size_bytes: None,
-            created_by,
+            created_by: created_by.into(),
             created_by_execution_id: None,
             status: ArtifactStatus::default(),
             created_at: now,
@@ -676,12 +676,13 @@ mod tests {
             "/output/report.pdf",
             "report.pdf",
             ArtifactType::File,
-            card_id,
+            format!("card:{}", card_id),
         );
         assert_eq!(artifact.project_id, project_id);
         assert_eq!(artifact.filename, "report.pdf");
         assert_eq!(artifact.artifact_type, ArtifactType::File);
         assert_eq!(artifact.status, ArtifactStatus::Active);
+        assert!(artifact.created_by.starts_with("card:"));
     }
 
     #[test]

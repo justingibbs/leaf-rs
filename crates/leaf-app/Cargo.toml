@@ -29,6 +29,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 globset = { workspace = true }
 mime_guess = { workspace = true }
+walkdir = { workspace = true }
 
 [lib]
 name = "leaf_app_lib"

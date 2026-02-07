@@ -1,5 +1,6 @@
 //! Tauri command modules
 
+pub mod artifacts;
 pub mod cards;
 pub mod chat;
 pub mod events;

@@ -93,6 +93,10 @@ pub fn run() {
             commands::mcp::disable_mcp_server,
             commands::mcp::list_mcp_tools,
             commands::mcp::test_mcp_server,
+            // Artifact commands
+            commands::artifacts::list_artifacts,
+            commands::artifacts::get_artifact,
+            commands::artifacts::scan_artifacts,
             // Settings commands
             commands::settings::get_app_config,
             commands::settings::update_app_config,
