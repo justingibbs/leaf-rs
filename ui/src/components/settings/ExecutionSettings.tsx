@@ -30,10 +30,10 @@ export function ExecutionSettings() {
     try {
       await updateProjectSettings({
         executionSettings: {
-          timeout_secs: timeoutSecs,
-          max_retries: maxRetries,
-          allow_network: allowNetwork,
-          deno_permissions: denoPermissions
+          timeoutSecs: timeoutSecs,
+          maxRetries: maxRetries,
+          allowNetwork: allowNetwork,
+          denoPermissions: denoPermissions
             .split(",")
             .map((p) => p.trim())
             .filter(Boolean),

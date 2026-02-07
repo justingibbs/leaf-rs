@@ -15,7 +15,11 @@ LEAF is a desktop application that lets you create automations through natural l
 
 ## Installation
 
-### From Release (Recommended)
+There are three ways to install and run LEAF:
+
+### Option 1: Download a Release (Recommended)
+
+The simplest way to get started — no build tools required.
 
 1. Download the latest `.dmg` from [Releases](https://github.com/your-org/leaf-rs/releases)
 2. Open the DMG and drag LEAF to your Applications folder
@@ -23,7 +27,9 @@ LEAF is a desktop application that lets you create automations through natural l
 
 > **Note**: This app is not code-signed. On first launch, macOS will warn about an unidentified developer. Right-click and select "Open" to bypass this warning.
 
-### From Source
+### Option 2: Development Mode (Recommended for Contributors)
+
+Run from source with hot reload — frontend changes update instantly.
 
 **Prerequisites:**
 - Rust (stable toolchain)
@@ -37,19 +43,26 @@ cd leaf-rs
 
 # Install frontend dependencies
 cd ui && pnpm install && cd ..
-```
 
-#### Development Mode (Recommended for Testing)
-
-```bash
+# Start the dev server
 cargo tauri dev
 ```
 
-This launches the app with hot reload - frontend changes update instantly. Best for development and testing.
+To stop the dev server, press `Ctrl+C` in the terminal where it's running. This shuts down both the Rust backend and the Vite frontend dev server.
 
-#### Build & Install DMG
+### Option 3: Build & Install from Source
+
+Build a distributable `.dmg` locally. Use this for final testing or sharing with others.
+
+**Prerequisites:** Same as Option 2.
 
 ```bash
+# Clone and install (if you haven't already)
+git clone https://github.com/your-org/leaf-rs.git
+cd leaf-rs
+cd ui && pnpm install && cd ..
+
+# Build the app
 cargo tauri build
 ```
 
@@ -57,8 +70,6 @@ Then:
 1. Open `target/release/bundle/dmg/LEAF_0.1.0_aarch64.dmg`
 2. Drag LEAF to Applications
 3. **First launch**: Right-click → "Open" (required since unsigned)
-
-Use this for final testing or sharing with others.
 
 ## Quick Start
 

@@ -4,7 +4,7 @@ use leaf_agent::{Agent, AgentContext, ProviderConfig, ProviderType};
 use leaf_core::{LeafEvent, Message, MessageRole};
 use leaf_db::{MessageQueries, SessionQueries};
 use tauri::{AppHandle, Emitter, State};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::state::AppState;
@@ -80,11 +80,9 @@ pub async fn send_message(
         user_message.id, session_id
     );
 
-    // Emit the user message event
-    if let Err(e) = app_handle.emit("leaf-event", &LeafEvent::MessageReceived(user_message.clone()))
-    {
-        warn!("Failed to emit user MessageReceived event: {}", e);
-    }
+    // Note: We do NOT emit a MessageReceived event for the user message here.
+    // The user message is returned directly to the frontend via the command response,
+    // and the frontend adds it to state. Emitting an event would cause duplication.
 
     // Clone what we need for the async task
     let app_handle_clone = app_handle.clone();
@@ -186,12 +184,6 @@ pub async fn send_message_sync(
     let user_message = Message::new(session_uuid, MessageRole::User, &content);
     db.create_message(&user_message)
         .map_err(|e| e.to_string())?;
-
-    // Emit the user message
-    if let Err(e) = app_handle.emit("leaf-event", &LeafEvent::MessageReceived(user_message.clone()))
-    {
-        warn!("Failed to emit user MessageReceived event: {}", e);
-    }
 
     // Build provider config
     let provider_type = match agent_config.provider.as_deref() {

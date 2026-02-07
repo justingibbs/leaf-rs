@@ -5,6 +5,7 @@
 
 use std::path::PathBuf;
 
+use chrono::Utc;
 use futures::StreamExt;
 use leaf_core::{ChatSession, LeafEvent, Message, MessageRole, ToolCall};
 use leaf_db::{Database, MessageQueries};
@@ -265,6 +266,9 @@ impl Agent {
         let mut response_text = String::new();
         let mut all_tool_calls: Vec<ToolCall> = Vec::new();
         let mut current_tool_call: Option<(String, String, String)> = None; // (id, name, partial_json)
+        // Stable message ID for streaming - reused across all chunks so the frontend
+        // can update the same message in-place rather than creating duplicates
+        let mut streaming_message_id = Uuid::new_v4();
 
         loop {
             // Emit thinking event
@@ -299,11 +303,17 @@ impl Agent {
                     ChatChunk::TextDelta { text, .. } => {
                         response_text.push_str(&text);
 
-                        // Create partial message for streaming
-                        let partial_message =
-                            Message::new(ctx.session.id, MessageRole::Assistant, &response_text);
+                        // Create partial message with stable ID for streaming updates
+                        let partial_message = Message {
+                            id: streaming_message_id,
+                            session_id: ctx.session.id,
+                            role: MessageRole::Assistant,
+                            content: response_text.clone(),
+                            tool_calls: Vec::new(),
+                            created_at: Utc::now(),
+                        };
 
-                        // Emit partial message
+                        // Emit partial message (frontend updates in-place via matching ID)
                         if let Err(e) = ctx.app_handle.emit(
                             "leaf-event",
                             &LeafEvent::MessageReceived(partial_message),
@@ -390,6 +400,7 @@ impl Agent {
 
                 // Reset for next iteration
                 response_text.clear();
+                streaming_message_id = Uuid::new_v4();
                 continue;
             }
 
@@ -397,9 +408,15 @@ impl Agent {
             break;
         }
 
-        // Create final message
-        let mut final_message = Message::new(ctx.session.id, MessageRole::Assistant, &response_text);
-        final_message.tool_calls = all_tool_calls;
+        // Create final message with the same stable ID used during streaming
+        let final_message = Message {
+            id: streaming_message_id,
+            session_id: ctx.session.id,
+            role: MessageRole::Assistant,
+            content: response_text,
+            tool_calls: all_tool_calls,
+            created_at: Utc::now(),
+        };
 
         // Emit final message
         if let Err(e) = ctx.app_handle.emit(
