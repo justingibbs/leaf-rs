@@ -19,7 +19,7 @@ impl EventQueries for Database {
     fn create_event(&self, event: &Event) -> Result<()> {
         let conn = self.conn()?;
         conn.execute(
-            "INSERT INTO events (id, project_id, event_type, payload, status, matched_cards, created_at, processed_at)
+            "INSERT INTO events (id, project_id, event_type, payload, status, matched_stacks, created_at, processed_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 event.id.to_string(),
@@ -27,7 +27,7 @@ impl EventQueries for Database {
                 serde_json::to_string(&event.event_type)?,
                 serde_json::to_string(&event.payload)?,
                 serde_json::to_string(&event.status)?,
-                serde_json::to_string(&event.matched_cards)?,
+                serde_json::to_string(&event.matched_stacks)?,
                 event.created_at.to_rfc3339(),
                 event.processed_at.map(|dt| dt.to_rfc3339()),
             ],
@@ -38,7 +38,7 @@ impl EventQueries for Database {
     fn get_event(&self, id: Uuid) -> Result<Option<Event>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, event_type, payload, status, matched_cards, created_at, processed_at
+            "SELECT id, project_id, event_type, payload, status, matched_stacks, created_at, processed_at
              FROM events WHERE id = ?1",
         )?;
 
@@ -55,7 +55,7 @@ impl EventQueries for Database {
         let conn = self.conn()?;
         let limit = limit.unwrap_or(100);
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, event_type, payload, status, matched_cards, created_at, processed_at
+            "SELECT id, project_id, event_type, payload, status, matched_stacks, created_at, processed_at
              FROM events WHERE project_id = ?1 ORDER BY created_at DESC LIMIT ?2",
         )?;
 
@@ -89,7 +89,7 @@ impl EventQueries for Database {
     fn list_pending_events(&self, project_id: Uuid) -> Result<Vec<Event>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, event_type, payload, status, matched_cards, created_at, processed_at
+            "SELECT id, project_id, event_type, payload, status, matched_stacks, created_at, processed_at
              FROM events WHERE project_id = ?1 AND status = '\"pending\"' ORDER BY created_at ASC",
         )?;
 
@@ -108,7 +108,7 @@ fn row_to_event(row: &Row) -> rusqlite::Result<Event> {
     let event_type: String = row.get(2)?;
     let payload: String = row.get(3)?;
     let status: String = row.get(4)?;
-    let matched_cards: String = row.get(5)?;
+    let matched_stacks: String = row.get(5)?;
     let created_at: String = row.get(6)?;
     let processed_at: Option<String> = row.get(7)?;
 
@@ -118,7 +118,7 @@ fn row_to_event(row: &Row) -> rusqlite::Result<Event> {
         event_type: serde_json::from_str(&event_type).unwrap_or(EventType::Manual),
         payload: serde_json::from_str(&payload).unwrap_or(EventPayload::Manual { input: None }),
         status: serde_json::from_str(&status).unwrap_or(EventStatus::Pending),
-        matched_cards: serde_json::from_str(&matched_cards).unwrap_or_default(),
+        matched_stacks: serde_json::from_str(&matched_stacks).unwrap_or_default(),
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
             .map(|dt| dt.with_timezone(&chrono::Utc))
             .unwrap_or_else(|_| chrono::Utc::now()),

@@ -1,7 +1,7 @@
 # Branches
 - Phase7
 - random-qa
-- phaseA
+- phase-a
 
 ---
 

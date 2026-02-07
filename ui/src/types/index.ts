@@ -8,15 +8,27 @@ export interface Project {
   last_opened_at: string;
 }
 
-export interface Card {
+export interface Stack {
   id: string;
   project_id: string;
   name: string;
   description: string;
   trigger: TriggerConfig;
-  program: ProgramConfig;
   enabled: boolean;
-  session_id: string | null;
+  source_session_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Card {
+  id: string;
+  stack_id: string;
+  name: string;
+  description: string;
+  program: ProgramConfig;
+  program_path: string;
+  position: number;
+  enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -41,7 +53,7 @@ export interface Event {
   event_type: EventType;
   payload: EventPayload;
   status: EventStatus;
-  matched_cards: string[];
+  matched_stacks: string[];
   created_at: string;
   processed_at: string | null;
 }
@@ -55,12 +67,34 @@ export type EventPayload =
   | { type: "schedule"; scheduled_time: string }
   | { type: "manual"; input?: string };
 
-export interface Execution {
+export type ExecutionStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "timeout"
+  | "cancelled";
+
+export interface StackExecution {
   id: string;
-  card_id: string;
+  stack_id: string;
   event_id: string | null;
   status: ExecutionStatus;
-  attempt: number;
+  card_count: number;
+  completed_cards: number;
+  failed_at_position: number | null;
+  error: string | null;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+}
+
+export interface CardExecution {
+  id: string;
+  stack_execution_id: string;
+  card_id: string;
+  position: number;
+  status: ExecutionStatus;
   stdout: string;
   stderr: string;
   exit_code: number | null;
@@ -69,13 +103,25 @@ export interface Execution {
   duration_ms: number | null;
 }
 
-export type ExecutionStatus =
-  | "pending"
-  | "running"
-  | "success"
-  | "failed"
-  | "timeout"
-  | "cancelled";
+export type ArtifactType = "file" | "directory";
+
+export type ArtifactStatus = "active" | "modified" | "deleted";
+
+export interface Artifact {
+  id: string;
+  project_id: string;
+  path: string;
+  filename: string;
+  artifact_type: ArtifactType;
+  mime_type: string | null;
+  size_bytes: number | null;
+  created_by: string;
+  created_by_execution_id: string | null;
+  status: ArtifactStatus;
+  created_at: string;
+  modified_at: string;
+  metadata: unknown | null;
+}
 
 export interface ChatSession {
   id: string;
@@ -110,16 +156,11 @@ export interface ToolCall {
 export interface CreateCardInput {
   name: string;
   description: string;
-  trigger?: TriggerConfig;
-  program?: ProgramConfig;
-  session_id?: string;
 }
 
 export interface UpdateCardInput {
   name?: string;
   description?: string;
-  trigger?: TriggerConfig;
-  program?: ProgramConfig;
   enabled?: boolean;
 }
 
@@ -243,21 +284,38 @@ export type LeafEvent =
   | { type: "project_opened"; payload: Project }
   | { type: "project_closed"; payload: { project_id: string } }
   | { type: "project_updated"; payload: Project }
+  // Stack events
+  | { type: "stack_created"; payload: Stack }
+  | { type: "stack_updated"; payload: Stack }
+  | { type: "stack_deleted"; payload: { stack_id: string } }
+  | { type: "stack_enabled"; payload: { stack_id: string } }
+  | { type: "stack_disabled"; payload: { stack_id: string } }
+  // Card events
   | { type: "card_created"; payload: Card }
   | { type: "card_updated"; payload: Card }
-  | { type: "card_deleted"; payload: { card_id: string } }
-  | { type: "card_enabled"; payload: { card_id: string } }
-  | { type: "card_disabled"; payload: { card_id: string } }
+  | { type: "card_deleted"; payload: { card_id: string; stack_id: string } }
+  | { type: "card_reordered"; payload: { stack_id: string } }
+  // File watcher events
   | { type: "file_detected"; payload: { project_id: string; path: string; event_type: string } }
   | { type: "watcher_started"; payload: { project_id: string; paths: string[] } }
   | { type: "watcher_stopped"; payload: { project_id: string } }
   | { type: "watcher_error"; payload: { project_id: string; error: string } }
+  // Event processing
   | { type: "event_created"; payload: Event }
-  | { type: "event_processing"; payload: { event_id: string; matched_cards: string[] } }
+  | { type: "event_processing"; payload: { event_id: string; matched_stacks: string[] } }
   | { type: "event_completed"; payload: { event_id: string; status: EventStatus } }
-  | { type: "execution_started"; payload: Execution }
-  | { type: "execution_progress"; payload: { execution_id: string; stdout: string; stderr: string } }
-  | { type: "execution_completed"; payload: { execution_id: string; status: ExecutionStatus; exit_code: number | null } }
+  // Stack execution events
+  | { type: "stack_execution_started"; payload: StackExecution }
+  | { type: "stack_execution_progress"; payload: { stack_execution_id: string; completed_cards: number; card_count: number } }
+  | { type: "stack_execution_completed"; payload: { stack_execution_id: string; status: ExecutionStatus } }
+  // Card execution events
+  | { type: "card_execution_started"; payload: CardExecution }
+  | { type: "card_execution_completed"; payload: { card_execution_id: string; status: ExecutionStatus; exit_code: number | null } }
+  // Artifact events
+  | { type: "artifact_created"; payload: Artifact }
+  | { type: "artifact_modified"; payload: { artifact_id: string } }
+  | { type: "artifact_deleted"; payload: { artifact_id: string } }
+  // Chat events
   | { type: "session_created"; payload: ChatSession }
   | { type: "session_updated"; payload: ChatSession }
   | { type: "message_received"; payload: Message }

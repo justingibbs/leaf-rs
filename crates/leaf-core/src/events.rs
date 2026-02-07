@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::types::{
-    Card, ChatSession, Event, Execution, ExecutionStatus, EventStatus, Message, Project,
+    Artifact, Card, ChatSession, Event, ExecutionStatus, EventStatus, Message, Project,
+    Stack, StackExecution, CardExecution,
 };
 
 /// Events emitted by LEAF for UI updates and inter-component communication
@@ -16,12 +17,18 @@ pub enum LeafEvent {
     ProjectClosed { project_id: Uuid },
     ProjectUpdated(Project),
 
+    // Stack events
+    StackCreated(Stack),
+    StackUpdated(Stack),
+    StackDeleted { stack_id: Uuid },
+    StackEnabled { stack_id: Uuid },
+    StackDisabled { stack_id: Uuid },
+
     // Card events
     CardCreated(Card),
     CardUpdated(Card),
-    CardDeleted { card_id: Uuid },
-    CardEnabled { card_id: Uuid },
-    CardDisabled { card_id: Uuid },
+    CardDeleted { card_id: Uuid, stack_id: Uuid },
+    CardReordered { stack_id: Uuid },
 
     // File watcher events
     FileDetected {
@@ -45,25 +52,37 @@ pub enum LeafEvent {
     EventCreated(Event),
     EventProcessing {
         event_id: Uuid,
-        matched_cards: Vec<Uuid>,
+        matched_stacks: Vec<Uuid>,
     },
     EventCompleted {
         event_id: Uuid,
         status: EventStatus,
     },
 
-    // Execution events
-    ExecutionStarted(Execution),
-    ExecutionProgress {
-        execution_id: Uuid,
-        stdout: String,
-        stderr: String,
+    // Stack execution events
+    StackExecutionStarted(StackExecution),
+    StackExecutionProgress {
+        stack_execution_id: Uuid,
+        completed_cards: i32,
+        card_count: i32,
     },
-    ExecutionCompleted {
-        execution_id: Uuid,
+    StackExecutionCompleted {
+        stack_execution_id: Uuid,
+        status: ExecutionStatus,
+    },
+
+    // Card execution events
+    CardExecutionStarted(CardExecution),
+    CardExecutionCompleted {
+        card_execution_id: Uuid,
         status: ExecutionStatus,
         exit_code: Option<i32>,
     },
+
+    // Artifact events
+    ArtifactCreated(Artifact),
+    ArtifactModified { artifact_id: Uuid },
+    ArtifactDeleted { artifact_id: Uuid },
 
     // Chat events
     SessionCreated(ChatSession),
@@ -140,11 +159,11 @@ mod tests {
 
     #[test]
     fn test_leaf_event_serialization() {
-        let event = LeafEvent::CardEnabled {
-            card_id: Uuid::new_v4(),
+        let event = LeafEvent::StackEnabled {
+            stack_id: Uuid::new_v4(),
         };
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains("card_enabled"));
+        assert!(json.contains("stack_enabled"));
     }
 
     #[test]
@@ -154,5 +173,25 @@ mod tests {
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("project_opened"));
         assert!(json.contains("Test"));
+    }
+
+    #[test]
+    fn test_leaf_event_card_deleted_has_stack_id() {
+        let event = LeafEvent::CardDeleted {
+            card_id: Uuid::new_v4(),
+            stack_id: Uuid::new_v4(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("card_deleted"));
+        assert!(json.contains("stack_id"));
+    }
+
+    #[test]
+    fn test_leaf_event_stack_execution() {
+        let stack_id = Uuid::new_v4();
+        let exec = StackExecution::new(stack_id, None, 2);
+        let event = LeafEvent::StackExecutionStarted(exec);
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("stack_execution_started"));
     }
 }

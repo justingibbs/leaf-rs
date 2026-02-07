@@ -1,9 +1,10 @@
 //! LEAF Database - SQLite storage layer for LEAF
 //!
 //! This crate provides database operations for all LEAF entities:
-//! - Cards, Events, Executions
+//! - Stacks, Cards, Events, Executions
 //! - Chat sessions and messages
 //! - MCP server configurations
+//! - Artifacts
 
 pub mod migrations;
 pub mod queries;
@@ -83,12 +84,15 @@ impl Clone for Database {
 }
 
 // Re-export query modules
+pub use queries::artifacts::ArtifactQueries;
+pub use queries::card_executions::CardExecutionQueries;
 pub use queries::cards::CardQueries;
 pub use queries::events::EventQueries;
-pub use queries::executions::ExecutionQueries;
 pub use queries::mcp::McpServerQueries;
 pub use queries::messages::MessageQueries;
 pub use queries::sessions::SessionQueries;
+pub use queries::stack_executions::StackExecutionQueries;
+pub use queries::stacks::StackQueries;
 
 #[cfg(test)]
 mod tests {

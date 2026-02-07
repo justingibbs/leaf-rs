@@ -27,7 +27,7 @@ impl Project {
     }
 }
 
-/// Trigger configuration - what causes a card to run
+/// Trigger configuration - what causes a stack to run
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TriggerConfig {
@@ -182,7 +182,7 @@ impl TriggerConfig {
     }
 }
 
-/// Program configuration - how to run the card's code
+/// Program configuration - how to run a card's code
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgramConfig {
     /// Programming language (currently only "typescript")
@@ -220,22 +220,21 @@ impl Default for ProgramConfig {
     }
 }
 
-/// A Card - an automation unit with trigger and program
+/// A Stack - an automation unit with trigger and ordered pipeline of cards
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Card {
+pub struct Stack {
     pub id: Uuid,
     pub project_id: Uuid,
     pub name: String,
     pub description: String,
     pub trigger: TriggerConfig,
-    pub program: ProgramConfig,
     pub enabled: bool,
-    pub session_id: Option<Uuid>,
+    pub source_session_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-impl Card {
+impl Stack {
     pub fn new(
         project_id: Uuid,
         name: impl Into<String>,
@@ -248,9 +247,45 @@ impl Card {
             name: name.into(),
             description: description.into(),
             trigger: TriggerConfig::default(),
-            program: ProgramConfig::default(),
             enabled: true,
-            session_id: None,
+            source_session_id: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+/// A Card - a single step in a stack's pipeline
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Card {
+    pub id: Uuid,
+    pub stack_id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub program: ProgramConfig,
+    pub program_path: String,
+    pub position: i32,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl Card {
+    pub fn new(
+        stack_id: Uuid,
+        name: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            id: Uuid::new_v4(),
+            stack_id,
+            name: name.into(),
+            description: description.into(),
+            program: ProgramConfig::default(),
+            program_path: String::new(),
+            position: 0,
+            enabled: true,
             created_at: now,
             updated_at: now,
         }
@@ -298,7 +333,7 @@ pub enum EventPayload {
     },
 }
 
-/// An Event - something that happened that may trigger cards
+/// An Event - something that happened that may trigger stacks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     pub id: Uuid,
@@ -306,7 +341,7 @@ pub struct Event {
     pub event_type: EventType,
     pub payload: EventPayload,
     pub status: EventStatus,
-    pub matched_cards: Vec<Uuid>,
+    pub matched_stacks: Vec<Uuid>,
     pub created_at: DateTime<Utc>,
     pub processed_at: Option<DateTime<Utc>>,
 }
@@ -319,14 +354,14 @@ impl Event {
             event_type,
             payload,
             status: EventStatus::default(),
-            matched_cards: Vec::new(),
+            matched_stacks: Vec::new(),
             created_at: Utc::now(),
             processed_at: None,
         }
     }
 }
 
-/// Execution status
+/// Execution status (used for both stack and card executions)
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionStatus {
@@ -339,14 +374,48 @@ pub enum ExecutionStatus {
     Cancelled,
 }
 
-/// An Execution - a single run of a card's program
+/// A StackExecution - a single run of a stack's pipeline
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Execution {
+pub struct StackExecution {
     pub id: Uuid,
-    pub card_id: Uuid,
+    pub stack_id: Uuid,
     pub event_id: Option<Uuid>,
     pub status: ExecutionStatus,
-    pub attempt: u32,
+    pub card_count: i32,
+    pub completed_cards: i32,
+    pub failed_at_position: Option<i32>,
+    pub error: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub duration_ms: Option<u64>,
+}
+
+impl StackExecution {
+    pub fn new(stack_id: Uuid, event_id: Option<Uuid>, card_count: i32) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            stack_id,
+            event_id,
+            status: ExecutionStatus::default(),
+            card_count,
+            completed_cards: 0,
+            failed_at_position: None,
+            error: None,
+            started_at: Utc::now(),
+            completed_at: None,
+            duration_ms: None,
+        }
+    }
+}
+
+/// A CardExecution - a single run of a card within a stack execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CardExecution {
+    pub id: Uuid,
+    pub stack_execution_id: Uuid,
+    pub card_id: Uuid,
+    pub position: i32,
+    pub status: ExecutionStatus,
     pub stdout: String,
     pub stderr: String,
     pub exit_code: Option<i32>,
@@ -355,20 +424,83 @@ pub struct Execution {
     pub duration_ms: Option<u64>,
 }
 
-impl Execution {
-    pub fn new(card_id: Uuid, event_id: Option<Uuid>) -> Self {
+impl CardExecution {
+    pub fn new(stack_execution_id: Uuid, card_id: Uuid, position: i32) -> Self {
         Self {
             id: Uuid::new_v4(),
+            stack_execution_id,
             card_id,
-            event_id,
+            position,
             status: ExecutionStatus::default(),
-            attempt: 1,
             stdout: String::new(),
             stderr: String::new(),
             exit_code: None,
             started_at: Utc::now(),
             completed_at: None,
             duration_ms: None,
+        }
+    }
+}
+
+/// Artifact type
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactType {
+    File,
+    Directory,
+}
+
+/// Artifact status
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactStatus {
+    #[default]
+    Active,
+    Modified,
+    Deleted,
+}
+
+/// An Artifact - a file or directory produced by an execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Artifact {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub path: String,
+    pub filename: String,
+    pub artifact_type: ArtifactType,
+    pub mime_type: Option<String>,
+    pub size_bytes: Option<i64>,
+    pub created_by: Uuid,
+    pub created_by_execution_id: Option<Uuid>,
+    pub status: ArtifactStatus,
+    pub created_at: DateTime<Utc>,
+    pub modified_at: DateTime<Utc>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+impl Artifact {
+    pub fn new(
+        project_id: Uuid,
+        path: impl Into<String>,
+        filename: impl Into<String>,
+        artifact_type: ArtifactType,
+        created_by: Uuid,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            id: Uuid::new_v4(),
+            project_id,
+            path: path.into(),
+            filename: filename.into(),
+            artifact_type,
+            mime_type: None,
+            size_bytes: None,
+            created_by,
+            created_by_execution_id: None,
+            status: ArtifactStatus::default(),
+            created_at: now,
+            modified_at: now,
+            metadata: None,
         }
     }
 }
@@ -496,12 +628,60 @@ mod tests {
     }
 
     #[test]
-    fn test_card_new() {
+    fn test_stack_new() {
         let project_id = Uuid::new_v4();
-        let card = Card::new(project_id, "Test Card", "A test card");
+        let stack = Stack::new(project_id, "Test Stack", "A test stack");
+        assert_eq!(stack.name, "Test Stack");
+        assert_eq!(stack.project_id, project_id);
+        assert!(stack.enabled);
+    }
+
+    #[test]
+    fn test_card_new() {
+        let stack_id = Uuid::new_v4();
+        let card = Card::new(stack_id, "Test Card", "A test card");
         assert_eq!(card.name, "Test Card");
-        assert_eq!(card.project_id, project_id);
+        assert_eq!(card.stack_id, stack_id);
         assert!(card.enabled);
+        assert_eq!(card.position, 0);
+    }
+
+    #[test]
+    fn test_stack_execution_new() {
+        let stack_id = Uuid::new_v4();
+        let exec = StackExecution::new(stack_id, None, 3);
+        assert_eq!(exec.stack_id, stack_id);
+        assert_eq!(exec.card_count, 3);
+        assert_eq!(exec.completed_cards, 0);
+        assert_eq!(exec.status, ExecutionStatus::Pending);
+    }
+
+    #[test]
+    fn test_card_execution_new() {
+        let stack_exec_id = Uuid::new_v4();
+        let card_id = Uuid::new_v4();
+        let exec = CardExecution::new(stack_exec_id, card_id, 0);
+        assert_eq!(exec.stack_execution_id, stack_exec_id);
+        assert_eq!(exec.card_id, card_id);
+        assert_eq!(exec.position, 0);
+        assert_eq!(exec.status, ExecutionStatus::Pending);
+    }
+
+    #[test]
+    fn test_artifact_new() {
+        let project_id = Uuid::new_v4();
+        let card_id = Uuid::new_v4();
+        let artifact = Artifact::new(
+            project_id,
+            "/output/report.pdf",
+            "report.pdf",
+            ArtifactType::File,
+            card_id,
+        );
+        assert_eq!(artifact.project_id, project_id);
+        assert_eq!(artifact.filename, "report.pdf");
+        assert_eq!(artifact.artifact_type, ArtifactType::File);
+        assert_eq!(artifact.status, ArtifactStatus::Active);
     }
 
     #[test]
@@ -545,8 +725,6 @@ mod tests {
             mime_type: None,
         };
 
-        // Note: This test uses absolute paths that may not exist on the filesystem
-        // The evaluate method handles this gracefully
         let project_root = Path::new("/project");
         let result = trigger.evaluate(&event_type, &payload, project_root);
 

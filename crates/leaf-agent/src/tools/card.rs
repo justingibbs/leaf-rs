@@ -1,18 +1,17 @@
 //! Card creation tools for the LEAF agent
 //!
 //! These tools allow the agent to propose and create automation cards.
+//! Phase A: Execute methods are stubbed to return "temporarily disabled" messages.
+//! The struct definitions and Tool trait implementations are preserved so the tool registry compiles.
 
 use async_trait::async_trait;
-use leaf_core::{Card, LeafEvent, ProgramConfig, TriggerConfig};
-use leaf_db::CardQueries;
+use leaf_core::TriggerConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::Emitter;
-use tracing::{debug, info};
+use tracing::debug;
 
 use super::{Tool, ToolContext};
-use crate::codegen::generate_card_program;
-use crate::error::{AgentError, AgentResult};
+use crate::error::AgentResult;
 
 /// Tool for proposing a card (preview before creation)
 pub struct ProposeCardTool;
@@ -72,15 +71,6 @@ impl From<TriggerProposal> for TriggerConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct ProposeCardArgs {
-    name: String,
-    description: String,
-    trigger: TriggerProposal,
-    /// The TypeScript code for the card
-    code: String,
-}
-
 #[async_trait]
 impl Tool for ProposeCardTool {
     fn name(&self) -> &str {
@@ -134,40 +124,18 @@ impl Tool for ProposeCardTool {
         })
     }
 
-    async fn execute(&self, _ctx: &ToolContext, args: Value) -> AgentResult<Value> {
-        let args: ProposeCardArgs = serde_json::from_value(args)?;
-
-        debug!("Proposing card: {}", args.name);
-
-        // Generate the full program code with boilerplate
-        let full_code = generate_card_program(&args.code)?;
-
-        let proposal = CardProposal {
-            name: args.name,
-            description: args.description,
-            trigger: args.trigger,
-            code_preview: full_code,
-        };
-
+    async fn execute(&self, _ctx: &ToolContext, _args: Value) -> AgentResult<Value> {
+        // TODO: Phase B - reimplement with Stack creation
+        debug!("propose_card: temporarily disabled during Stack migration");
         Ok(serde_json::json!({
-            "status": "proposed",
-            "message": "Card proposed for user review. Wait for user confirmation before creating.",
-            "proposal": proposal
+            "status": "error",
+            "message": "Card proposal temporarily disabled during Stack & Cards migration. This will be re-enabled in a future update."
         }))
     }
 }
 
 /// Tool for creating a card immediately
 pub struct CreateCardNowTool;
-
-#[derive(Debug, Deserialize)]
-struct CreateCardArgs {
-    name: String,
-    description: String,
-    trigger: TriggerProposal,
-    /// The TypeScript code for the card
-    code: String,
-}
 
 #[async_trait]
 impl Tool for CreateCardNowTool {
@@ -222,60 +190,12 @@ impl Tool for CreateCardNowTool {
         })
     }
 
-    async fn execute(&self, ctx: &ToolContext, args: Value) -> AgentResult<Value> {
-        let args: CreateCardArgs = serde_json::from_value(args)?;
-
-        info!("Creating card: {}", args.name);
-
-        // Generate the full program code with boilerplate
-        let full_code = generate_card_program(&args.code)?;
-
-        // Create the card slug from the name
-        let slug = slugify(&args.name);
-
-        // Create the program directory
-        let program_dir = ctx.programs_dir().join(&slug);
-        tokio::fs::create_dir_all(&program_dir)
-            .await
-            .map_err(|e| AgentError::IoError(e))?;
-
-        // Write the TypeScript code
-        let entrypoint = "main.ts";
-        let program_path = program_dir.join(entrypoint);
-        tokio::fs::write(&program_path, &full_code)
-            .await
-            .map_err(|e| AgentError::IoError(e))?;
-
-        debug!("Wrote program to: {}", program_path.display());
-
-        // Create the card in the database
-        let mut card = Card::new(ctx.project_id, &args.name, &args.description);
-        card.trigger = args.trigger.into();
-        card.program = ProgramConfig {
-            language: "typescript".to_string(),
-            entrypoint: entrypoint.to_string(),
-            dependencies: Vec::new(),
-            timeout_secs: 300,
-            max_retries: 3,
-        };
-        card.session_id = Some(ctx.session_id);
-
-        // Save to database
-        ctx.db.create_card(&card)?;
-
-        info!("Card created: {} ({})", card.name, card.id);
-
-        // Emit card created event
-        if let Err(e) = ctx.app_handle.emit("leaf-event", &LeafEvent::CardCreated(card.clone())) {
-            tracing::warn!("Failed to emit CardCreated event: {}", e);
-        }
-
+    async fn execute(&self, _ctx: &ToolContext, _args: Value) -> AgentResult<Value> {
+        // TODO: Phase B - reimplement with Stack + Card creation
+        debug!("create_card_now: temporarily disabled during Stack migration");
         Ok(serde_json::json!({
-            "status": "created",
-            "card_id": card.id.to_string(),
-            "name": card.name,
-            "program_path": program_path.to_string_lossy(),
-            "message": format!("Card '{}' created successfully!", card.name)
+            "status": "error",
+            "message": "Card creation temporarily disabled during Stack & Cards migration. This will be re-enabled in a future update."
         }))
     }
 }

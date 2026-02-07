@@ -1,73 +1,46 @@
-//! Execution-related Tauri commands
+//! Execution-related Tauri commands (stubbed for Phase A)
+//!
+//! These commands are placeholders that maintain the Tauri IPC interface.
+//! They will be rewritten in Phase C with StackExecution/CardExecution logic.
 
-use leaf_core::Execution;
-use leaf_db::ExecutionQueries;
 use tauri::State;
 use tracing::debug;
-use uuid::Uuid;
 
 use crate::state::AppState;
 
-/// List executions, optionally filtered by card
+/// List executions (stubbed - returns empty)
+/// TODO: Phase C - rewrite to list stack executions
 #[tauri::command]
 pub async fn list_executions(
     state: State<'_, AppState>,
     card_id: Option<String>,
     limit: Option<u32>,
-) -> Result<Vec<Execution>, String> {
-    debug!("Listing executions, card_id: {:?}, limit: {:?}", card_id, limit);
-
-    let db = state.get_db().map_err(|e| e.to_string())?;
-
-    let executions = if let Some(card_id_str) = card_id {
-        let id = Uuid::parse_str(&card_id_str).map_err(|e| format!("Invalid card ID: {}", e))?;
-        db.list_executions_for_card(id, limit)
-            .map_err(|e| format!("Failed to list executions: {}", e))?
-    } else {
-        // List all running executions if no card specified
-        db.list_running_executions()
-            .map_err(|e| format!("Failed to list executions: {}", e))?
-    };
-
-    debug!("Found {} executions", executions.len());
-    Ok(executions)
+) -> Result<Vec<serde_json::Value>, String> {
+    debug!("list_executions: stubbed for Phase A, card_id: {:?}, limit: {:?}", card_id, limit);
+    let _ = state;
+    Ok(Vec::new())
 }
 
-/// Get a single execution by ID
+/// Get a single execution by ID (stubbed - returns None)
+/// TODO: Phase C - rewrite to get stack execution
 #[tauri::command]
 pub async fn get_execution(
     state: State<'_, AppState>,
     execution_id: String,
-) -> Result<Option<Execution>, String> {
-    debug!("Getting execution: {}", execution_id);
-
-    let id = Uuid::parse_str(&execution_id).map_err(|e| format!("Invalid execution ID: {}", e))?;
-
-    let db = state.get_db().map_err(|e| e.to_string())?;
-
-    let execution = db
-        .get_execution(id)
-        .map_err(|e| format!("Failed to get execution: {}", e))?;
-
-    Ok(execution)
+) -> Result<Option<serde_json::Value>, String> {
+    debug!("get_execution: stubbed for Phase A, execution_id={}", execution_id);
+    let _ = state;
+    Ok(None)
 }
 
-/// List executions for a specific event
+/// List executions for a specific event (stubbed - returns empty)
+/// TODO: Phase C - rewrite to list stack executions for event
 #[tauri::command]
 pub async fn list_executions_for_event(
     state: State<'_, AppState>,
     event_id: String,
-) -> Result<Vec<Execution>, String> {
-    debug!("Listing executions for event: {}", event_id);
-
-    let id = Uuid::parse_str(&event_id).map_err(|e| format!("Invalid event ID: {}", e))?;
-
-    let db = state.get_db().map_err(|e| e.to_string())?;
-
-    let executions = db
-        .list_executions_for_event(id)
-        .map_err(|e| format!("Failed to list executions: {}", e))?;
-
-    debug!("Found {} executions", executions.len());
-    Ok(executions)
+) -> Result<Vec<serde_json::Value>, String> {
+    debug!("list_executions_for_event: stubbed for Phase A, event_id={}", event_id);
+    let _ = state;
+    Ok(Vec::new())
 }
