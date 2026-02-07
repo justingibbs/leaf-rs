@@ -1,111 +1,228 @@
-//! Card-related Tauri commands (stubbed for Phase A)
-//!
-//! These commands are placeholders that maintain the Tauri IPC interface.
-//! They will be rewritten in Phase B with Stack-aware logic.
+//! Card-related Tauri commands (stack-aware)
 
-use leaf_core::Card;
-use tauri::{AppHandle, State};
-use tracing::debug;
+use leaf_core::{Card, LeafEvent, ProgramConfig};
+use leaf_db::CardQueries;
+use tauri::{AppHandle, Emitter, State};
+use tracing::{info, warn};
+use uuid::Uuid;
 
 use crate::state::AppState;
 
-/// Input for creating a new card (stub)
+/// Input for creating a new card within a stack
 #[derive(Debug, serde::Deserialize)]
 pub struct CreateCardInput {
+    pub stack_id: String,
     pub name: String,
     pub description: String,
+    pub program: Option<ProgramConfig>,
+    pub program_path: Option<String>,
+    pub position: Option<i32>,
 }
 
-/// Input for updating an existing card (stub)
+/// Input for updating an existing card
 #[derive(Debug, serde::Deserialize)]
 pub struct UpdateCardInput {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub enabled: Option<bool>,
+    pub program: Option<ProgramConfig>,
+    pub program_path: Option<String>,
+    pub position: Option<i32>,
 }
 
-/// List all cards for the current project
-/// TODO: Phase B - rewrite to list cards via stacks
+/// List all cards for a stack
 #[tauri::command]
-pub async fn list_cards(state: State<'_, AppState>) -> Result<Vec<Card>, String> {
-    debug!("list_cards: stubbed for Phase A");
-    let _ = state;
-    Ok(Vec::new())
+pub async fn list_cards(
+    state: State<'_, AppState>,
+    stack_id: String,
+) -> Result<Vec<Card>, String> {
+    let db = state.get_db().map_err(|e| e.to_string())?;
+    let stack_uuid = Uuid::parse_str(&stack_id).map_err(|e| e.to_string())?;
+
+    let cards = db
+        .list_cards_for_stack(stack_uuid)
+        .map_err(|e| e.to_string())?;
+
+    Ok(cards)
 }
 
 /// Get a single card by ID
-/// TODO: Phase B - rewrite with stack-aware logic
 #[tauri::command]
 pub async fn get_card(state: State<'_, AppState>, card_id: String) -> Result<Option<Card>, String> {
-    debug!("get_card: stubbed for Phase A, card_id={}", card_id);
-    let _ = state;
-    Ok(None)
+    let db = state.get_db().map_err(|e| e.to_string())?;
+    let card_uuid = Uuid::parse_str(&card_id).map_err(|e| e.to_string())?;
+
+    let card = db.get_card(card_uuid).map_err(|e| e.to_string())?;
+
+    Ok(card)
 }
 
-/// Create a new card
-/// TODO: Phase B - rewrite to create card within a stack
+/// Create a new card within a stack
 #[tauri::command]
 pub async fn create_card(
-    _app: AppHandle,
+    app_handle: AppHandle,
     state: State<'_, AppState>,
     input: CreateCardInput,
 ) -> Result<Card, String> {
-    debug!("create_card: stubbed for Phase A, name={}", input.name);
-    let _ = state;
-    Err("Card creation temporarily disabled during Stack migration".to_string())
+    let db = state.get_db().map_err(|e| e.to_string())?;
+    let stack_uuid = Uuid::parse_str(&input.stack_id).map_err(|e| e.to_string())?;
+
+    let mut card = Card::new(stack_uuid, &input.name, &input.description);
+
+    if let Some(program) = input.program {
+        card.program = program;
+    }
+    if let Some(program_path) = input.program_path {
+        card.program_path = program_path;
+    }
+    if let Some(position) = input.position {
+        card.position = position;
+    }
+
+    db.create_card(&card).map_err(|e| e.to_string())?;
+
+    info!("Created card: {} ({}) in stack {}", card.name, card.id, stack_uuid);
+
+    if let Err(e) = app_handle.emit("leaf-event", &LeafEvent::CardCreated(card.clone())) {
+        warn!("Failed to emit CardCreated event: {}", e);
+    }
+
+    Ok(card)
 }
 
 /// Update an existing card
-/// TODO: Phase B - rewrite with stack-aware logic
 #[tauri::command]
 pub async fn update_card(
-    _app: AppHandle,
+    app_handle: AppHandle,
     state: State<'_, AppState>,
     card_id: String,
     input: UpdateCardInput,
 ) -> Result<Card, String> {
-    debug!("update_card: stubbed for Phase A, card_id={}", card_id);
-    let _ = (state, input);
-    Err("Card update temporarily disabled during Stack migration".to_string())
+    let db = state.get_db().map_err(|e| e.to_string())?;
+    let card_uuid = Uuid::parse_str(&card_id).map_err(|e| e.to_string())?;
+
+    let mut card = db
+        .get_card(card_uuid)
+        .map_err(|e| e.to_string())?
+        .ok_or("Card not found")?;
+
+    if let Some(name) = input.name {
+        card.name = name;
+    }
+    if let Some(description) = input.description {
+        card.description = description;
+    }
+    if let Some(program) = input.program {
+        card.program = program;
+    }
+    if let Some(program_path) = input.program_path {
+        card.program_path = program_path;
+    }
+    if let Some(position) = input.position {
+        card.position = position;
+    }
+    card.updated_at = chrono::Utc::now();
+
+    db.update_card(&card).map_err(|e| e.to_string())?;
+
+    info!("Updated card: {} ({})", card.name, card.id);
+
+    if let Err(e) = app_handle.emit("leaf-event", &LeafEvent::CardUpdated(card.clone())) {
+        warn!("Failed to emit CardUpdated event: {}", e);
+    }
+
+    Ok(card)
 }
 
 /// Delete a card
-/// TODO: Phase B - rewrite with stack-aware logic
 #[tauri::command]
 pub async fn delete_card(
-    _app: AppHandle,
+    app_handle: AppHandle,
     state: State<'_, AppState>,
     card_id: String,
 ) -> Result<(), String> {
-    debug!("delete_card: stubbed for Phase A, card_id={}", card_id);
-    let _ = state;
-    Err("Card deletion temporarily disabled during Stack migration".to_string())
+    let db = state.get_db().map_err(|e| e.to_string())?;
+    let card_uuid = Uuid::parse_str(&card_id).map_err(|e| e.to_string())?;
+
+    let card = db
+        .get_card(card_uuid)
+        .map_err(|e| e.to_string())?
+        .ok_or("Card not found")?;
+
+    let stack_id = card.stack_id;
+
+    db.delete_card(card_uuid).map_err(|e| e.to_string())?;
+
+    info!("Deleted card: {} ({})", card.name, card_id);
+
+    if let Err(e) = app_handle.emit(
+        "leaf-event",
+        &LeafEvent::CardDeleted {
+            card_id: card_uuid,
+            stack_id,
+        },
+    ) {
+        warn!("Failed to emit CardDeleted event: {}", e);
+    }
+
+    Ok(())
 }
 
 /// Enable a card
-/// TODO: Phase B - rewrite with stack-aware logic
 #[tauri::command]
 pub async fn enable_card(
-    _app: AppHandle,
+    app_handle: AppHandle,
     state: State<'_, AppState>,
     card_id: String,
 ) -> Result<Card, String> {
-    debug!("enable_card: stubbed for Phase A, card_id={}", card_id);
-    let _ = state;
-    Err("Card enable temporarily disabled during Stack migration".to_string())
+    let db = state.get_db().map_err(|e| e.to_string())?;
+    let card_uuid = Uuid::parse_str(&card_id).map_err(|e| e.to_string())?;
+
+    let mut card = db
+        .get_card(card_uuid)
+        .map_err(|e| e.to_string())?
+        .ok_or("Card not found")?;
+
+    card.enabled = true;
+    card.updated_at = chrono::Utc::now();
+
+    db.update_card(&card).map_err(|e| e.to_string())?;
+
+    info!("Enabled card: {} ({})", card.name, card.id);
+
+    if let Err(e) = app_handle.emit("leaf-event", &LeafEvent::CardUpdated(card.clone())) {
+        warn!("Failed to emit CardUpdated event: {}", e);
+    }
+
+    Ok(card)
 }
 
 /// Disable a card
-/// TODO: Phase B - rewrite with stack-aware logic
 #[tauri::command]
 pub async fn disable_card(
-    _app: AppHandle,
+    app_handle: AppHandle,
     state: State<'_, AppState>,
     card_id: String,
 ) -> Result<Card, String> {
-    debug!("disable_card: stubbed for Phase A, card_id={}", card_id);
-    let _ = state;
-    Err("Card disable temporarily disabled during Stack migration".to_string())
+    let db = state.get_db().map_err(|e| e.to_string())?;
+    let card_uuid = Uuid::parse_str(&card_id).map_err(|e| e.to_string())?;
+
+    let mut card = db
+        .get_card(card_uuid)
+        .map_err(|e| e.to_string())?
+        .ok_or("Card not found")?;
+
+    card.enabled = false;
+    card.updated_at = chrono::Utc::now();
+
+    db.update_card(&card).map_err(|e| e.to_string())?;
+
+    info!("Disabled card: {} ({})", card.name, card.id);
+
+    if let Err(e) = app_handle.emit("leaf-event", &LeafEvent::CardUpdated(card.clone())) {
+        warn!("Failed to emit CardUpdated event: {}", e);
+    }
+
+    Ok(card)
 }
 
 /// Trigger a card manually
@@ -116,7 +233,7 @@ pub async fn trigger_card(
     state: State<'_, AppState>,
     card_id: String,
 ) -> Result<serde_json::Value, String> {
-    debug!("trigger_card: stubbed for Phase A, card_id={}", card_id);
     let _ = state;
-    Err("Card trigger temporarily disabled during Stack migration".to_string())
+    let _ = card_id;
+    Err("Card trigger not yet implemented (Phase C)".to_string())
 }

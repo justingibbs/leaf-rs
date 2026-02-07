@@ -50,6 +50,14 @@ pub fn run() {
             commands::events::list_events,
             commands::events::get_event,
             commands::events::list_pending_events,
+            // Stack commands
+            commands::stacks::list_stacks,
+            commands::stacks::get_stack,
+            commands::stacks::create_stack,
+            commands::stacks::update_stack,
+            commands::stacks::delete_stack,
+            commands::stacks::enable_stack,
+            commands::stacks::disable_stack,
             // Card commands
             commands::cards::list_cards,
             commands::cards::get_card,
