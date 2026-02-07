@@ -40,6 +40,7 @@ interface ChatState {
   handleAgentThinking: (sessionId: string) => void;
   handleAgentToolCall: (sessionId: string, toolName: string, args: unknown) => void;
   handleAgentDone: () => void;
+  handleChatError: (sessionId: string, message: string) => void;
 
   // Config actions
   setAgentConfig: (config: AgentConfig) => void;
@@ -232,6 +233,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   handleAgentDone: () => {
     set({ isAgentThinking: false, currentToolCall: null });
+  },
+
+  handleChatError: (sessionId: string, message: string) => {
+    const { activeSessionId } = get();
+    if (sessionId === activeSessionId) {
+      set({
+        messagesError: message,
+        isAgentThinking: false,
+        currentToolCall: null
+      });
+    }
   },
 
   // Set agent config

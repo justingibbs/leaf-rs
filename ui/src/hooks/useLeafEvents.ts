@@ -23,6 +23,7 @@ export function useLeafEvents() {
     handleMessageReceived,
     handleAgentThinking,
     handleAgentToolCall,
+    handleChatError,
   } = useChatStore();
   const {
     handleServerConnected,
@@ -82,6 +83,11 @@ export function useLeafEvents() {
               `Error in ${leafEvent.payload.context}:`,
               leafEvent.payload.message
             );
+            // Handle chat errors specifically
+            if (leafEvent.payload.context.startsWith("chat:")) {
+              const sessionId = leafEvent.payload.context.replace("chat:", "");
+              handleChatError(sessionId, leafEvent.payload.message);
+            }
             break;
 
           case "warning":
@@ -229,6 +235,7 @@ export function useLeafEvents() {
     handleMessageReceived,
     handleAgentThinking,
     handleAgentToolCall,
+    handleChatError,
     handleServerConnected,
     handleServerDisconnected,
     handleServerError,

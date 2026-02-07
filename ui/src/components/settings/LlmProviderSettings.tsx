@@ -5,7 +5,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 const LLM_PROVIDERS = [
   { value: "anthropic", label: "Anthropic", models: ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229"] },
   { value: "openai", label: "OpenAI", models: ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"] },
-  { value: "google", label: "Google", models: ["gemini-1.5-pro", "gemini-1.5-flash"] },
+  { value: "google", label: "Google", models: ["gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash"] },
   { value: "ollama", label: "Ollama", models: ["llama3.1", "codellama", "mistral"] },
 ];
 
@@ -21,10 +21,11 @@ export function LlmProviderSettings() {
   const [maxTokens, setMaxTokens] = useState(4096);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
-  // Initialize form from projectConfig
+  // Initialize form from projectConfig (only once on load)
   useEffect(() => {
-    if (projectConfig?.llmSettings) {
+    if (projectConfig?.llmSettings && !initialized) {
       const llm = projectConfig.llmSettings;
       setProvider(llm.provider);
       setModel(llm.model);
@@ -32,8 +33,9 @@ export function LlmProviderSettings() {
       setBaseUrl(llm.base_url || "");
       setTemperature(llm.temperature);
       setMaxTokens(llm.max_tokens);
+      setInitialized(true);
     }
-  }, [projectConfig]);
+  }, [projectConfig, initialized]);
 
   const selectedProvider = LLM_PROVIDERS.find(p => p.value === provider);
   const availableModels = selectedProvider?.models || [];
@@ -51,14 +53,15 @@ export function LlmProviderSettings() {
     setIsSaving(true);
     setSaveSuccess(false);
     try {
+      // Use camelCase to match Rust's serde rename_all = "camelCase"
       await updateProjectSettings({
         llmSettings: {
           provider,
           model,
-          api_key: apiKey || null,
-          base_url: baseUrl || null,
+          apiKey: apiKey || null,
+          baseUrl: baseUrl || null,
           temperature,
-          max_tokens: maxTokens,
+          maxTokens: maxTokens,
         },
       });
       setSaveSuccess(true);

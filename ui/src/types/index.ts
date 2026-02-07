@@ -213,11 +213,29 @@ export interface ProjectConfig {
   executionSettings: ExecutionSettings;
 }
 
+// LLM settings update input (camelCase to match Rust serde rename_all)
+export interface LlmSettingsUpdate {
+  provider?: string;
+  model?: string;
+  apiKey?: string | null;
+  baseUrl?: string | null;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+// Execution settings update input (camelCase to match Rust serde rename_all)
+export interface ExecutionSettingsUpdate {
+  timeoutSecs?: number;
+  maxRetries?: number;
+  allowNetwork?: boolean;
+  denoPermissions?: string[];
+}
+
 // Project config update input
 export interface ProjectConfigUpdate {
   name?: string;
-  llmSettings?: Partial<LlmSettings>;
-  executionSettings?: Partial<ExecutionSettings>;
+  llmSettings?: LlmSettingsUpdate;
+  executionSettings?: ExecutionSettingsUpdate;
 }
 
 // LEAF events emitted from Rust to frontend
