@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { LeafEvent } from "../types";
 import { useEventStore } from "../stores/eventStore";
-import { useCardStore } from "../stores/cardStore";
+import { useStackStore } from "../stores/stackStore";
 import { useExecutionStore } from "../stores/executionStore";
 import { useChatStore } from "../stores/chatStore";
 import { useMcpStore } from "../stores/mcpStore";
@@ -14,7 +14,16 @@ import { useMcpStore } from "../stores/mcpStore";
  */
 export function useLeafEvents() {
   const { addEvent, updateEventStatus } = useEventStore();
-  const { addCard, updateCardInStore, removeCard, loadCards } = useCardStore();
+  const {
+    addStack,
+    updateStackInStore,
+    removeStack,
+    setStackEnabled,
+    addCard,
+    updateCardInStore,
+    removeCard,
+    reloadCardsForStack,
+  } = useStackStore();
   const { addExecution, updateExecution, updateExecutionStatus } =
     useExecutionStore();
   const {
@@ -54,7 +63,6 @@ export function useLeafEvents() {
             break;
 
           case "file_detected":
-            // File was detected but not yet processed into an event
             console.log("File detected:", leafEvent.payload.path);
             break;
 
@@ -83,7 +91,6 @@ export function useLeafEvents() {
               `Error in ${leafEvent.payload.context}:`,
               leafEvent.payload.message
             );
-            // Handle chat errors specifically
             if (leafEvent.payload.context.startsWith("chat:")) {
               const sessionId = leafEvent.payload.context.replace("chat:", "");
               handleChatError(sessionId, leafEvent.payload.message);
@@ -95,6 +102,32 @@ export function useLeafEvents() {
               `Warning in ${leafEvent.payload.context}:`,
               leafEvent.payload.message
             );
+            break;
+
+          // Stack events
+          case "stack_created":
+            console.log("Stack created:", leafEvent.payload.name);
+            addStack(leafEvent.payload);
+            break;
+
+          case "stack_updated":
+            console.log("Stack updated:", leafEvent.payload.name);
+            updateStackInStore(leafEvent.payload);
+            break;
+
+          case "stack_deleted":
+            console.log("Stack deleted:", leafEvent.payload.stack_id);
+            removeStack(leafEvent.payload.stack_id);
+            break;
+
+          case "stack_enabled":
+            console.log("Stack enabled:", leafEvent.payload.stack_id);
+            setStackEnabled(leafEvent.payload.stack_id, true);
+            break;
+
+          case "stack_disabled":
+            console.log("Stack disabled:", leafEvent.payload.stack_id);
+            setStackEnabled(leafEvent.payload.stack_id, false);
             break;
 
           // Card events
@@ -110,45 +143,50 @@ export function useLeafEvents() {
 
           case "card_deleted":
             console.log("Card deleted:", leafEvent.payload.card_id);
-            removeCard(leafEvent.payload.card_id);
+            removeCard(leafEvent.payload.card_id, leafEvent.payload.stack_id);
             break;
 
-          case "card_enabled":
-            console.log("Card enabled:", leafEvent.payload.card_id);
-            // Reload cards to get updated state
-            loadCards();
+          case "card_reordered":
+            console.log("Cards reordered in stack:", leafEvent.payload.stack_id);
+            reloadCardsForStack(leafEvent.payload.stack_id);
             break;
 
-          case "card_disabled":
-            console.log("Card disabled:", leafEvent.payload.card_id);
-            // Reload cards to get updated state
-            loadCards();
-            break;
-
-          // Execution events
-          case "execution_started":
-            console.log("Execution started:", leafEvent.payload.id);
+          // Stack execution events
+          case "stack_execution_started":
+            console.log("Stack execution started:", leafEvent.payload.id);
             addExecution(leafEvent.payload);
             break;
 
-          case "execution_progress":
-            console.log("Execution progress:", leafEvent.payload.execution_id);
-            updateExecution(leafEvent.payload.execution_id, {
-              stdout: leafEvent.payload.stdout,
-              stderr: leafEvent.payload.stderr,
+          case "stack_execution_progress":
+            console.log("Stack execution progress:", leafEvent.payload.stack_execution_id);
+            updateExecution(leafEvent.payload.stack_execution_id, {
+              completed_cards: leafEvent.payload.completed_cards,
+              card_count: leafEvent.payload.card_count,
             });
             break;
 
-          case "execution_completed":
+          case "stack_execution_completed":
             console.log(
-              "Execution completed:",
-              leafEvent.payload.execution_id,
+              "Stack execution completed:",
+              leafEvent.payload.stack_execution_id,
               leafEvent.payload.status
             );
             updateExecutionStatus(
-              leafEvent.payload.execution_id,
-              leafEvent.payload.status,
-              leafEvent.payload.exit_code
+              leafEvent.payload.stack_execution_id,
+              leafEvent.payload.status
+            );
+            break;
+
+          // Card execution events
+          case "card_execution_started":
+            console.log("Card execution started:", leafEvent.payload.id);
+            break;
+
+          case "card_execution_completed":
+            console.log(
+              "Card execution completed:",
+              leafEvent.payload.card_execution_id,
+              leafEvent.payload.status
             );
             break;
 
@@ -207,7 +245,6 @@ export function useLeafEvents() {
             break;
 
           default:
-            // Handle other event types as needed
             console.log("Unhandled event type:", leafEvent);
         }
       });
@@ -223,10 +260,14 @@ export function useLeafEvents() {
   }, [
     addEvent,
     updateEventStatus,
+    addStack,
+    updateStackInStore,
+    removeStack,
+    setStackEnabled,
     addCard,
     updateCardInStore,
     removeCard,
-    loadCards,
+    reloadCardsForStack,
     addExecution,
     updateExecution,
     updateExecutionStatus,

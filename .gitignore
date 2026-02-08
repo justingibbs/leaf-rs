@@ -46,3 +46,5 @@ crates/leaf-app/icons/*_temp.png
 *.rpm
 *.AppImage
 *.tar.gz
+
+scratch.md

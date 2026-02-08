@@ -1,15 +1,13 @@
-// Individual execution item
+// Individual stack execution item
 import { useState } from "react";
-import type { Execution, ExecutionStatus } from "../../types";
-import { getCardById } from "../../stores/cardStore";
+import type { StackExecution, ExecutionStatus } from "../../types";
 
 interface ExecutionItemProps {
-  execution: Execution;
+  execution: StackExecution;
 }
 
 export function ExecutionItem({ execution }: ExecutionItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const card = getCardById(execution.card_id);
 
   const getStatusIcon = (status: ExecutionStatus): JSX.Element => {
     switch (status) {
@@ -164,25 +162,23 @@ export function ExecutionItem({ execution }: ExecutionItemProps) {
     return date.toLocaleTimeString();
   };
 
-  const hasOutput = execution.stdout || execution.stderr;
+  const hasError = !!execution.error;
 
   return (
-    <div className="border-b border-gray-100 last:border-b-0">
+    <div className="border-b border-gray-100 dark:border-gray-800 last:border-b-0">
       <div
-        className={`px-4 py-3 hover:bg-gray-50 transition-colors ${
-          hasOutput ? "cursor-pointer" : ""
+        className={`px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+          hasError ? "cursor-pointer" : ""
         }`}
-        onClick={() => hasOutput && setIsExpanded(!isExpanded)}
+        onClick={() => hasError && setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-3">
-          {/* Status icon */}
           <div className="flex-shrink-0">{getStatusIcon(execution.status)}</div>
 
-          {/* Execution details */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-900 truncate">
-                {card?.name || "Unknown Card"}
+              <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                Stack Execution
               </span>
               <span
                 className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(
@@ -191,26 +187,22 @@ export function ExecutionItem({ execution }: ExecutionItemProps) {
               >
                 {getStatusLabel(execution.status)}
               </span>
-              {execution.attempt > 1 && (
-                <span className="text-xs text-gray-400">
-                  Attempt {execution.attempt}
+              {execution.card_count > 1 && (
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  {execution.completed_cards}/{execution.card_count} cards
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+            <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 dark:text-gray-500">
               <span>Started {formatTime(execution.started_at)}</span>
               {execution.duration_ms !== null && (
                 <span>Duration: {formatDuration(execution.duration_ms)}</span>
               )}
-              {execution.exit_code !== null && (
-                <span>Exit code: {execution.exit_code}</span>
-              )}
             </div>
           </div>
 
-          {/* Expand icon */}
-          {hasOutput && (
+          {hasError && (
             <div className="flex-shrink-0">
               <svg
                 className={`w-5 h-5 text-gray-400 transition-transform ${
@@ -232,29 +224,14 @@ export function ExecutionItem({ execution }: ExecutionItemProps) {
         </div>
       </div>
 
-      {/* Expandable output section */}
-      {isExpanded && hasOutput && (
+      {isExpanded && hasError && (
         <div className="px-4 pb-3">
-          {execution.stdout && (
-            <div className="mb-2">
-              <div className="text-xs font-medium text-gray-500 mb-1">
-                stdout:
-              </div>
-              <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-x-auto max-h-48 overflow-y-auto">
-                {execution.stdout}
-              </pre>
-            </div>
-          )}
-          {execution.stderr && (
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">
-                stderr:
-              </div>
-              <pre className="bg-gray-900 text-red-300 p-3 rounded text-xs overflow-x-auto max-h-48 overflow-y-auto">
-                {execution.stderr}
-              </pre>
-            </div>
-          )}
+          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+            Error:
+          </div>
+          <pre className="bg-gray-900 text-red-300 p-3 rounded text-xs overflow-x-auto max-h-48 overflow-y-auto">
+            {execution.error}
+          </pre>
         </div>
       )}
     </div>

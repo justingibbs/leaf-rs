@@ -1,4 +1,1 @@
-// Card components
-export { CardItem } from "./CardItem";
-export { CardList } from "./CardList";
-export { CardEditor } from "./CardEditor";
+// Card components (legacy - card management now handled through stack components)

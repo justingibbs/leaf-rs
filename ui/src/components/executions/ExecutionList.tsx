@@ -1,23 +1,22 @@
-// List of executions
+// List of stack executions
 import { useEffect } from "react";
 import { useExecutionStore, getRunningExecutions } from "../../stores/executionStore";
 import { ExecutionItem } from "./ExecutionItem";
 
 interface ExecutionListProps {
-  cardId?: string;
   limit?: number;
 }
 
-export function ExecutionList({ cardId, limit = 20 }: ExecutionListProps) {
+export function ExecutionList({ limit = 20 }: ExecutionListProps) {
   const { executions, isLoading, error, loadExecutions } = useExecutionStore();
 
   useEffect(() => {
-    loadExecutions(cardId, limit);
-  }, [cardId, limit, loadExecutions]);
+    loadExecutions(limit);
+  }, [limit, loadExecutions]);
 
   if (isLoading) {
     return (
-      <div className="p-4 text-center text-gray-500">
+      <div className="p-4 text-center text-gray-500 dark:text-gray-400">
         <div className="animate-pulse">Loading executions...</div>
       </div>
     );
@@ -33,22 +32,21 @@ export function ExecutionList({ cardId, limit = 20 }: ExecutionListProps) {
 
   if (executions.length === 0) {
     return (
-      <div className="p-4 text-center text-gray-500">
+      <div className="p-4 text-center text-gray-500 dark:text-gray-400">
         <p>No executions yet</p>
         <p className="text-sm mt-1">
-          Trigger a card or add files to a watched folder to see executions
+          Trigger a stack or add files to a watched folder to see executions
         </p>
       </div>
     );
   }
 
-  // Sort executions by started_at (most recent first)
   const sortedExecutions = [...executions].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
   );
 
   return (
-    <div className="divide-y divide-gray-100">
+    <div className="divide-y divide-gray-100 dark:divide-gray-800">
       {sortedExecutions.map((execution) => (
         <ExecutionItem key={execution.id} execution={execution} />
       ))}
@@ -65,7 +63,7 @@ export function ExecutionIndicator() {
   }
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 text-sm rounded">
+    <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm rounded">
       <svg
         className="w-4 h-4 animate-spin"
         fill="none"

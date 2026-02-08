@@ -3,23 +3,23 @@ import { useProjectStore } from "./stores/projectStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { ProjectPicker } from "./components/ProjectPicker";
 import { EventQueue } from "./components/EventQueue";
-import { CardList, CardEditor } from "./components/cards";
+import { StackList, StackDetail } from "./components/stacks";
 import { ChatView } from "./components/chat";
 import { SettingsModal } from "./components/settings";
 import { ToastContainer, ErrorBoundaryWrapper } from "./components/ui";
 import { useLeafEvents } from "./hooks/useLeafEvents";
 import { useTheme } from "./hooks/useTheme";
-import type { Card } from "./types";
+import type { Stack } from "./types";
 import "./App.css";
 
-type ActiveView = "chat" | "cards";
+type ActiveView = "chat" | "stacks";
 
 function App() {
   const { project, closeProject } = useProjectStore();
   const { openSettings } = useSettingsStore();
   const [activeView, setActiveView] = useState<ActiveView>("chat");
-  const [showCardEditor, setShowCardEditor] = useState(false);
-  const [editingCard, setEditingCard] = useState<Card | undefined>(undefined);
+  const [showStackDetail, setShowStackDetail] = useState(false);
+  const [editingStack, setEditingStack] = useState<Stack | undefined>(undefined);
 
   // Subscribe to LEAF events from Rust
   useLeafEvents();
@@ -39,7 +39,7 @@ function App() {
             break;
           case "2":
             e.preventDefault();
-            setActiveView("cards");
+            setActiveView("stacks");
             break;
         }
       }
@@ -49,24 +49,24 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [openSettings]);
 
-  const handleCreateCard = () => {
-    setEditingCard(undefined);
-    setShowCardEditor(true);
+  const handleCreateStack = () => {
+    setEditingStack(undefined);
+    setShowStackDetail(true);
   };
 
-  const handleSelectCard = (card: Card) => {
-    setEditingCard(card);
-    setShowCardEditor(true);
+  const handleSelectStack = (stack: Stack) => {
+    setEditingStack(stack);
+    setShowStackDetail(true);
   };
 
-  const handleCardSaved = () => {
-    setShowCardEditor(false);
-    setEditingCard(undefined);
+  const handleStackSaved = () => {
+    setShowStackDetail(false);
+    setEditingStack(undefined);
   };
 
   const handleCancelEdit = () => {
-    setShowCardEditor(false);
-    setEditingCard(undefined);
+    setShowStackDetail(false);
+    setEditingStack(undefined);
   };
 
   if (!project) {
@@ -101,14 +101,14 @@ function App() {
               Chat
             </button>
             <button
-              onClick={() => setActiveView("cards")}
+              onClick={() => setActiveView("stacks")}
               className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                activeView === "cards"
+                activeView === "stacks"
                   ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
                   : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
-              Cards
+              Stacks
             </button>
           </div>
 
@@ -136,23 +136,23 @@ function App() {
 
       {/* Main content area - 3 column layout */}
       <main className="flex-1 flex overflow-hidden p-4 gap-4">
-        {/* Left/Center column: Chat or Cards */}
+        {/* Left/Center column: Chat or Stacks */}
         <div className="flex-1 min-w-0">
           {activeView === "chat" ? (
             <ChatView />
-          ) : showCardEditor ? (
+          ) : showStackDetail ? (
             <div className="h-full bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-auto">
-              <CardEditor
-                card={editingCard}
-                onSave={handleCardSaved}
+              <StackDetail
+                stack={editingStack}
+                onSave={handleStackSaved}
                 onCancel={handleCancelEdit}
               />
             </div>
           ) : (
             <div className="h-full bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-auto">
-              <CardList
-                onSelectCard={handleSelectCard}
-                onCreateCard={handleCreateCard}
+              <StackList
+                onSelectStack={handleSelectStack}
+                onCreateStack={handleCreateStack}
               />
             </div>
           )}
@@ -174,7 +174,7 @@ function App() {
               <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">Cmd+1</kbd> Chat
             </span>
             <span>
-              <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">Cmd+2</kbd> Cards
+              <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">Cmd+2</kbd> Stacks
             </span>
             <span>
               <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">Cmd+N</kbd> New Chat

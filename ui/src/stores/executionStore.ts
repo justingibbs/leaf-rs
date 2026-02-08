@@ -1,26 +1,28 @@
-// Execution store for managing card executions
+// Execution store for managing stack executions
 import { create } from "zustand";
-import type { Execution, ExecutionStatus } from "../types";
+import type { StackExecution, ExecutionStatus } from "../types";
 import { api } from "../lib/tauri";
 
 interface ExecutionState {
-  // Executions list
-  executions: Execution[];
+  // Stack executions list
+  executions: StackExecution[];
   isLoading: boolean;
   error: string | null;
 
   // Actions
-  loadExecutions: (cardId?: string, limit?: number) => Promise<void>;
+  loadExecutions: (limit?: number) => Promise<void>;
   loadExecutionsForEvent: (eventId: string) => Promise<void>;
-  getExecution: (executionId: string) => Promise<Execution | null>;
+  getExecution: (executionId: string) => Promise<StackExecution | null>;
 
   // Real-time update handlers (from LeafEvent)
-  addExecution: (execution: Execution) => void;
-  updateExecution: (executionId: string, updates: Partial<Execution>) => void;
+  addExecution: (execution: StackExecution) => void;
+  updateExecution: (
+    executionId: string,
+    updates: Partial<StackExecution>
+  ) => void;
   updateExecutionStatus: (
     executionId: string,
-    status: ExecutionStatus,
-    exitCode?: number | null
+    status: ExecutionStatus
   ) => void;
 
   // Reset
@@ -28,16 +30,14 @@ interface ExecutionState {
 }
 
 export const useExecutionStore = create<ExecutionState>((set) => ({
-  // Initial state
   executions: [],
   isLoading: false,
   error: null,
 
-  // Load executions from the backend
-  loadExecutions: async (cardId?: string, limit?: number) => {
+  loadExecutions: async (limit?: number) => {
     set({ isLoading: true, error: null });
     try {
-      const executions = await api.listExecutions(cardId, limit);
+      const executions = await api.listExecutions(limit);
       set({ executions, isLoading: false });
     } catch (error) {
       console.error("Failed to load executions:", error);
@@ -45,7 +45,6 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
     }
   },
 
-  // Load executions for a specific event
   loadExecutionsForEvent: async (eventId: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -57,7 +56,6 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
     }
   },
 
-  // Get a single execution by ID
   getExecution: async (executionId: string) => {
     try {
       return await api.getExecution(executionId);
@@ -68,21 +66,17 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
     }
   },
 
-  // Add an execution (from real-time updates)
-  addExecution: (execution: Execution) => {
+  addExecution: (execution: StackExecution) => {
     set((state) => {
-      // Don't add if already exists
-      if (state.executions.some((e) => e.id === execution.id)) {
-        return state;
-      }
-      return {
-        executions: [execution, ...state.executions],
-      };
+      if (state.executions.some((e) => e.id === execution.id)) return state;
+      return { executions: [execution, ...state.executions] };
     });
   },
 
-  // Update an execution (from real-time updates)
-  updateExecution: (executionId: string, updates: Partial<Execution>) => {
+  updateExecution: (
+    executionId: string,
+    updates: Partial<StackExecution>
+  ) => {
     set((state) => ({
       executions: state.executions.map((e) =>
         e.id === executionId ? { ...e, ...updates } : e
@@ -90,28 +84,23 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
     }));
   },
 
-  // Update execution status (from completion events)
-  updateExecutionStatus: (
-    executionId: string,
-    status: ExecutionStatus,
-    exitCode?: number | null
-  ) => {
+  updateExecutionStatus: (executionId: string, status: ExecutionStatus) => {
     set((state) => ({
       executions: state.executions.map((e) =>
         e.id === executionId
           ? {
               ...e,
               status,
-              exit_code: exitCode !== undefined ? exitCode : e.exit_code,
               completed_at:
-                status === "running" ? e.completed_at : new Date().toISOString(),
+                status === "running"
+                  ? e.completed_at
+                  : new Date().toISOString(),
             }
           : e
       ),
     }));
   },
 
-  // Reset store state
   reset: () => {
     set({
       executions: [],
@@ -121,27 +110,18 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
   },
 }));
 
-// Helper to get executions for a specific card
-export const getExecutionsForCard = (cardId: string): Execution[] => {
+// Helper to get executions for a specific stack
+export const getExecutionsForStack = (stackId: string): StackExecution[] => {
   return useExecutionStore
     .getState()
-    .executions.filter((e) => e.card_id === cardId);
+    .executions.filter((e) => e.stack_id === stackId);
 };
 
 // Helper to get running executions
-export const getRunningExecutions = (): Execution[] => {
+export const getRunningExecutions = (): StackExecution[] => {
   return useExecutionStore
     .getState()
-    .executions.filter((e) => e.status === "running" || e.status === "pending");
-};
-
-// Helper to check if a card has any running executions
-export const isCardRunning = (cardId: string): boolean => {
-  return useExecutionStore
-    .getState()
-    .executions.some(
-      (e) =>
-        e.card_id === cardId &&
-        (e.status === "running" || e.status === "pending")
+    .executions.filter(
+      (e) => e.status === "running" || e.status === "pending"
     );
 };

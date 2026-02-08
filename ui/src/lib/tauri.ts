@@ -7,8 +7,8 @@ import type {
   ChatSession,
   CreateCardInput,
   CreateMcpServerInput,
+  CreateStackInput,
   Event,
-  Execution,
   McpServer,
   McpServerStatus,
   McpToolSummary,
@@ -17,7 +17,10 @@ import type {
   ProjectConfig,
   ProjectConfigUpdate,
   RecentProjectInfo,
+  Stack,
+  StackExecution,
   UpdateCardInput,
+  UpdateStackInput,
   WatchPath,
 } from "../types";
 
@@ -68,8 +71,30 @@ export const api = {
 
   listPendingEvents: (): Promise<Event[]> => invoke("list_pending_events"),
 
+  // Stack commands
+  listStacks: (): Promise<Stack[]> => invoke("list_stacks"),
+
+  getStack: (stackId: string): Promise<Stack | null> =>
+    invoke("get_stack", { stackId }),
+
+  createStack: (input: CreateStackInput): Promise<Stack> =>
+    invoke("create_stack", { input }),
+
+  updateStack: (stackId: string, input: UpdateStackInput): Promise<Stack> =>
+    invoke("update_stack", { stackId, input }),
+
+  deleteStack: (stackId: string): Promise<void> =>
+    invoke("delete_stack", { stackId }),
+
+  enableStack: (stackId: string): Promise<Stack> =>
+    invoke("enable_stack", { stackId }),
+
+  disableStack: (stackId: string): Promise<Stack> =>
+    invoke("disable_stack", { stackId }),
+
   // Card commands
-  listCards: (): Promise<Card[]> => invoke("list_cards"),
+  listCards: (stackId: string): Promise<Card[]> =>
+    invoke("list_cards", { stackId }),
 
   getCard: (cardId: string): Promise<Card | null> =>
     invoke("get_card", { cardId }),
@@ -89,17 +114,17 @@ export const api = {
   disableCard: (cardId: string): Promise<Card> =>
     invoke("disable_card", { cardId }),
 
-  triggerCard: (cardId: string): Promise<Execution> =>
+  triggerCard: (cardId: string): Promise<StackExecution> =>
     invoke("trigger_card", { cardId }),
 
   // Execution commands
-  listExecutions: (cardId?: string, limit?: number): Promise<Execution[]> =>
-    invoke("list_executions", { cardId, limit }),
+  listExecutions: (limit?: number): Promise<StackExecution[]> =>
+    invoke("list_executions", { limit }),
 
-  getExecution: (executionId: string): Promise<Execution | null> =>
+  getExecution: (executionId: string): Promise<StackExecution | null> =>
     invoke("get_execution", { executionId }),
 
-  listExecutionsForEvent: (eventId: string): Promise<Execution[]> =>
+  listExecutionsForEvent: (eventId: string): Promise<StackExecution[]> =>
     invoke("list_executions_for_event", { eventId }),
 
   // Session commands
@@ -134,11 +159,6 @@ export const api = {
    * Send a message to the chat agent (streaming).
    * Returns immediately with the user message.
    * The agent response is emitted via Tauri events as it streams.
-   * Listen to "leaf-event" for:
-   * - agent_thinking: Agent is processing
-   * - message_received: Partial or complete message
-   * - agent_tool_call: Agent is calling a tool
-   * - error: An error occurred
    */
   sendMessage: (
     sessionId: string,
@@ -149,7 +169,6 @@ export const api = {
 
   /**
    * Send a message and wait for the complete response (non-streaming).
-   * Useful for programmatic use.
    */
   sendMessageSync: (
     sessionId: string,

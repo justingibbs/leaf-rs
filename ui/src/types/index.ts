@@ -153,15 +153,37 @@ export interface ToolCall {
 }
 
 // Input types for API calls
-export interface CreateCardInput {
+
+// Stack inputs (match Rust CreateStackInput/UpdateStackInput)
+export interface CreateStackInput {
   name: string;
   description: string;
+  trigger: TriggerConfig;
+  source_session_id?: string;
+}
+
+export interface UpdateStackInput {
+  name?: string;
+  description?: string;
+  trigger?: TriggerConfig;
+}
+
+// Card inputs (match Rust CreateCardInput/UpdateCardInput)
+export interface CreateCardInput {
+  stack_id: string;
+  name: string;
+  description: string;
+  program?: ProgramConfig;
+  program_path?: string;
+  position?: number;
 }
 
 export interface UpdateCardInput {
   name?: string;
   description?: string;
-  enabled?: boolean;
+  program?: ProgramConfig;
+  program_path?: string;
+  position?: number;
 }
 
 export interface RecentProjectInfo {

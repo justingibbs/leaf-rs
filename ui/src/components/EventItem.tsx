@@ -110,10 +110,10 @@ export function EventItem({ event }: EventItemProps) {
             {event.payload.type === "file" && event.payload.mime_type && (
               <span>{event.payload.mime_type}</span>
             )}
-            {event.matched_cards.length > 0 && (
+            {event.matched_stacks.length > 0 && (
               <span className="text-leaf-600">
-                {event.matched_cards.length} card
-                {event.matched_cards.length !== 1 ? "s" : ""} matched
+                {event.matched_stacks.length} stack
+                {event.matched_stacks.length !== 1 ? "s" : ""} matched
               </span>
             )}
           </div>
