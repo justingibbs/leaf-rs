@@ -3,6 +3,7 @@ import { useProjectStore } from "./stores/projectStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { ProjectPicker } from "./components/ProjectPicker";
 import { EventQueue } from "./components/EventQueue";
+import { ArtifactPanel } from "./components/artifacts";
 import { StackList, StackDetail } from "./components/stacks";
 import { ChatView } from "./components/chat";
 import { SettingsModal } from "./components/settings";
@@ -13,6 +14,7 @@ import type { Stack } from "./types";
 import "./App.css";
 
 type ActiveView = "chat" | "stacks";
+type SidebarTab = "events" | "artifacts";
 
 function App() {
   const { project, closeProject } = useProjectStore();
@@ -20,6 +22,7 @@ function App() {
   const [activeView, setActiveView] = useState<ActiveView>("chat");
   const [showStackDetail, setShowStackDetail] = useState(false);
   const [editingStack, setEditingStack] = useState<Stack | undefined>(undefined);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("events");
 
   // Subscribe to LEAF events from Rust
   useLeafEvents();
@@ -158,10 +161,33 @@ function App() {
           )}
         </div>
 
-        {/* Right column: Events & Executions */}
-        <div className="w-96 flex-shrink-0">
-          <div className="h-full overflow-auto">
-            <EventQueue />
+        {/* Right column: Events/Artifacts sidebar */}
+        <div className="w-96 flex-shrink-0 flex flex-col h-full">
+          {/* Sidebar tab toggle */}
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 mb-3">
+            <button
+              onClick={() => setSidebarTab("events")}
+              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                sidebarTab === "events"
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+              }`}
+            >
+              Events
+            </button>
+            <button
+              onClick={() => setSidebarTab("artifacts")}
+              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                sidebarTab === "artifacts"
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+              }`}
+            >
+              Artifacts
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto">
+            {sidebarTab === "events" ? <EventQueue /> : <ArtifactPanel />}
           </div>
         </div>
       </main>

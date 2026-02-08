@@ -7,10 +7,10 @@ interface EventItemProps {
 
 export function EventItem({ event }: EventItemProps) {
   const statusColors: Record<Event["status"], string> = {
-    pending: "bg-yellow-100 text-yellow-800",
-    processing: "bg-blue-100 text-blue-800",
-    completed: "bg-green-100 text-green-800",
-    failed: "bg-red-100 text-red-800",
+    pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+    processing: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+    completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+    failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
   };
 
   const eventTypeIcons: Record<Event["event_type"], string> = {
@@ -25,17 +25,10 @@ export function EventItem({ event }: EventItemProps) {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
 
-    if (diff < 60000) {
-      return "Just now";
-    } else if (diff < 3600000) {
-      const mins = Math.floor(diff / 60000);
-      return `${mins}m ago`;
-    } else if (diff < 86400000) {
-      const hours = Math.floor(diff / 3600000);
-      return `${hours}h ago`;
-    } else {
-      return date.toLocaleDateString();
-    }
+    if (diff < 60000) return "Just now";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return date.toLocaleDateString();
   };
 
   const getFileName = (payload: EventPayload) => {
@@ -47,9 +40,7 @@ export function EventItem({ event }: EventItemProps) {
   };
 
   const getFilePath = (payload: EventPayload) => {
-    if (payload.type === "file") {
-      return payload.path;
-    }
+    if (payload.type === "file") return payload.path;
     return null;
   };
 
@@ -66,12 +57,12 @@ export function EventItem({ event }: EventItemProps) {
     event.payload.type === "file" ? formatFileSize(event.payload.size) : null;
 
   return (
-    <div className="px-4 py-3 hover:bg-gray-50 transition-colors">
+    <div className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
       <div className="flex items-start gap-3">
         {/* Event type icon */}
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
           <svg
-            className="w-4 h-4 text-gray-600"
+            className="w-4 h-4 text-gray-600 dark:text-gray-400"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -88,7 +79,7 @@ export function EventItem({ event }: EventItemProps) {
         {/* Event details */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-gray-900 truncate">
+            <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
               {fileName || event.event_type}
             </span>
             <span
@@ -99,19 +90,22 @@ export function EventItem({ event }: EventItemProps) {
           </div>
 
           {filePath && (
-            <p className="text-sm text-gray-500 truncate mt-0.5" title={filePath}>
+            <p
+              className="text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5"
+              title={filePath}
+            >
               {filePath}
             </p>
           )}
 
-          <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+          <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 dark:text-gray-500">
             <span>{formatTime(event.created_at)}</span>
             {fileSize && <span>{fileSize}</span>}
             {event.payload.type === "file" && event.payload.mime_type && (
               <span>{event.payload.mime_type}</span>
             )}
             {event.matched_stacks.length > 0 && (
-              <span className="text-leaf-600">
+              <span className="text-leaf-600 dark:text-leaf-400">
                 {event.matched_stacks.length} stack
                 {event.matched_stacks.length !== 1 ? "s" : ""} matched
               </span>

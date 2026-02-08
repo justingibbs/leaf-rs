@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppConfig,
   AppConfigUpdate,
+  Artifact,
   Card,
   ChatSession,
   CreateCardInput,
@@ -196,6 +197,15 @@ export const api = {
 
   testMcpServer: (serverId: string): Promise<McpServerStatus> =>
     invoke("test_mcp_server", { serverId }),
+
+  // Artifact commands
+  listArtifacts: (status?: string): Promise<Artifact[]> =>
+    invoke("list_artifacts", { status }),
+
+  getArtifact: (artifactId: string): Promise<Artifact | null> =>
+    invoke("get_artifact", { artifactId }),
+
+  scanArtifacts: (): Promise<Artifact[]> => invoke("scan_artifacts"),
 
   // Settings commands
   getAppConfig: (): Promise<AppConfig> => invoke("get_app_config"),
