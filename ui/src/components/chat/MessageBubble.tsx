@@ -1,5 +1,7 @@
 // Message bubble component
 import type { Message, ToolCall } from "../../types";
+import { StackProposalCard, type StackProposalResult } from "./StackProposalCard";
+import { WorkflowProgress, type CreateStackResult } from "./WorkflowProgress";
 
 interface MessageBubbleProps {
   message: Message;
@@ -69,8 +71,38 @@ interface ToolCallDisplayProps {
   toolCall: ToolCall;
 }
 
+function isProposalResult(result: unknown): result is StackProposalResult {
+  return (
+    result !== null &&
+    typeof result === "object" &&
+    (result as Record<string, unknown>).status === "proposed" &&
+    "stack" in (result as Record<string, unknown>) &&
+    "cards" in (result as Record<string, unknown>)
+  );
+}
+
+function isCreateResult(result: unknown): result is CreateStackResult {
+  return (
+    result !== null &&
+    typeof result === "object" &&
+    (result as Record<string, unknown>).status === "created" &&
+    "stack_id" in (result as Record<string, unknown>) &&
+    "cards" in (result as Record<string, unknown>)
+  );
+}
+
 function ToolCallDisplay({ toolCall }: ToolCallDisplayProps) {
-  const isCardTool = toolCall.name.includes("card");
+  // Render specialized components for stack tools
+  if (toolCall.name === "propose_stack" && isProposalResult(toolCall.result)) {
+    return <StackProposalCard proposal={toolCall.result} />;
+  }
+
+  if (toolCall.name === "create_stack_now" && isCreateResult(toolCall.result)) {
+    return <WorkflowProgress result={toolCall.result} />;
+  }
+
+  // Default tool call display
+  const isCardTool = toolCall.name.includes("card") || toolCall.name.includes("stack");
   const result = toolCall.result as Record<string, unknown> | undefined;
   const cardName = result && typeof result === "object" && "name" in result ? String(result.name) : null;
 
@@ -85,7 +117,7 @@ function ToolCallDisplay({ toolCall }: ToolCallDisplayProps) {
         )}
       </div>
 
-      {/* Show card creation result */}
+      {/* Show card/stack creation result */}
       {isCardTool && cardName && (
         <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
           <span>
