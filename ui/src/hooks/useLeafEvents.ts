@@ -1,6 +1,7 @@
 // Hook for subscribing to LEAF events from the Rust backend
 import { useEffect } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { useQueryClient } from "@tanstack/react-query";
 import type { LeafEvent } from "../types";
 import { useEventStore } from "../stores/eventStore";
 import { useStackStore } from "../stores/stackStore";
@@ -39,6 +40,7 @@ export function useLeafEvents() {
     handleServerDisconnected,
     handleServerError,
   } = useMcpStore();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     let unlistenFn: UnlistenFn | null = null;
@@ -244,6 +246,17 @@ export function useLeafEvents() {
             console.log("MCP tool result:", leafEvent.payload.tool_name, leafEvent.payload.success);
             break;
 
+          // Artifact events
+          case "artifact_created":
+            console.log("Artifact created:", leafEvent.payload.path);
+            queryClient.invalidateQueries({ queryKey: ["artifacts"] });
+            break;
+
+          case "artifact_deleted":
+            console.log("Artifact deleted:", leafEvent.payload.artifact_id);
+            queryClient.invalidateQueries({ queryKey: ["artifacts"] });
+            break;
+
           default:
             console.log("Unhandled event type:", leafEvent);
         }
@@ -280,5 +293,6 @@ export function useLeafEvents() {
     handleServerConnected,
     handleServerDisconnected,
     handleServerError,
+    queryClient,
   ]);
 }

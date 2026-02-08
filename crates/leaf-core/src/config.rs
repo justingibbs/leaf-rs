@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use uuid::Uuid;
 
 /// Application-wide configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +61,9 @@ pub struct RecentProject {
 /// Project-specific configuration (stored in .leaf/config.json)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectConfig {
+    /// Stable project ID (persisted across app restarts)
+    #[serde(default = "Uuid::new_v4")]
+    pub project_id: Uuid,
     /// Project display name
     pub name: String,
     /// Watched folders for file events
@@ -76,6 +80,7 @@ pub struct ProjectConfig {
 impl Default for ProjectConfig {
     fn default() -> Self {
         Self {
+            project_id: Uuid::new_v4(),
             name: "Untitled Project".to_string(),
             watch_paths: Vec::new(),
             llm_settings: LlmSettings::default(),

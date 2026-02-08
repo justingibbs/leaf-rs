@@ -111,10 +111,15 @@ impl GoogleProvider {
     }
 
     fn to_gemini_content(&self, msg: &ChatMessage) -> AgentResult<GeminiContent> {
-        let role = match msg.role {
-            ChatRole::User => "user",
-            ChatRole::Assistant => "model",
-            ChatRole::System => "user", // Handled separately
+        // Gemini uses "function" role for tool/function responses
+        let role = if msg.tool_result.is_some() {
+            "function"
+        } else {
+            match msg.role {
+                ChatRole::User => "user",
+                ChatRole::Assistant => "model",
+                ChatRole::System => "user", // Handled separately
+            }
         };
 
         let mut parts: Vec<GeminiPart> = Vec::new();
@@ -298,15 +303,32 @@ fn parse_gemini_sse_stream<S>(byte_stream: S) -> impl Stream<Item = AgentResult<
 where
     S: Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + Unpin + 'static,
 {
+    use std::collections::VecDeque;
+
     let buffer = String::new();
     let content_index: u32 = 0;
     let started_text = false;
     let pending_tool_calls: Vec<ToolCallRequest> = Vec::new();
+    let queued_chunks: VecDeque<ChatChunk> = VecDeque::new();
+    let done = false;
 
     futures::stream::unfold(
-        (byte_stream, buffer, content_index, started_text, pending_tool_calls),
-        |(mut stream, mut buffer, mut content_index, mut started_text, mut pending_tool_calls)| async move {
+        (byte_stream, buffer, content_index, started_text, pending_tool_calls, queued_chunks, done),
+        |(mut stream, mut buffer, mut content_index, mut started_text, mut pending_tool_calls, mut queued_chunks, mut done)| async move {
             use futures::StreamExt;
+
+            // If the stream is done, stop producing items
+            if done {
+                return None;
+            }
+
+            // Yield any queued chunks from a previous SSE event first
+            if let Some(chunk) = queued_chunks.pop_front() {
+                return Some((
+                    Ok(chunk),
+                    (stream, buffer, content_index, started_text, pending_tool_calls, queued_chunks, done),
+                ));
+            }
 
             loop {
                 // Check if we have a complete line in the buffer
@@ -328,9 +350,10 @@ where
                             } else {
                                 StopReason::ToolUse
                             };
+                            done = true;
                             return Some((
                                 Ok(ChatChunk::MessageStop { stop_reason }),
-                                (stream, buffer, content_index, started_text, pending_tool_calls),
+                                (stream, buffer, content_index, started_text, pending_tool_calls, queued_chunks, done),
                             ));
                         }
 
@@ -342,12 +365,13 @@ where
                                     &mut started_text,
                                     &mut pending_tool_calls,
                                 ) {
-                                    // Return the first chunk, buffer the rest
-                                    // For simplicity, we'll just return text chunks as we get them
-                                    for chunk in chunks {
+                                    let mut iter = chunks.into_iter();
+                                    if let Some(first) = iter.next() {
+                                        // Queue remaining chunks for subsequent calls
+                                        queued_chunks.extend(iter);
                                         return Some((
-                                            Ok(chunk),
-                                            (stream, buffer, content_index, started_text, pending_tool_calls),
+                                            Ok(first),
+                                            (stream, buffer, content_index, started_text, pending_tool_calls, queued_chunks, done),
                                         ));
                                     }
                                 }
@@ -368,20 +392,22 @@ where
                     Some(Err(e)) => {
                         return Some((
                             Err(AgentError::HttpError(e)),
-                            (stream, buffer, content_index, started_text, pending_tool_calls),
+                            (stream, buffer, content_index, started_text, pending_tool_calls, queued_chunks, done),
                         ));
                     }
                     None => {
-                        // Stream ended - emit final stop if we haven't
+                        // Stream ended - emit final stop if we haven't already
                         if started_text || !pending_tool_calls.is_empty() {
                             let stop_reason = if pending_tool_calls.is_empty() {
                                 StopReason::EndTurn
                             } else {
                                 StopReason::ToolUse
                             };
+                            // Mark done so we don't loop back and emit another MessageStop
+                            done = true;
                             return Some((
                                 Ok(ChatChunk::MessageStop { stop_reason }),
-                                (stream, buffer, content_index, started_text, pending_tool_calls),
+                                (stream, buffer, content_index, started_text, pending_tool_calls, queued_chunks, done),
                             ));
                         }
                         return None;

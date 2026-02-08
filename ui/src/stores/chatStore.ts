@@ -207,11 +207,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return {
             messages: state.messages.map((m) => (m.id === message.id ? message : m)),
             isAgentThinking: false,
+            currentToolCall: null,
           };
         }
         return {
           messages: [...state.messages, message],
           isAgentThinking: false,
+          currentToolCall: null,
         };
       });
     }

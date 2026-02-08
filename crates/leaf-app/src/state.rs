@@ -109,13 +109,17 @@ impl AppState {
         let config_path = leaf_dir.join("config.json");
         let project_config = if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
-            serde_json::from_str(&content).unwrap_or_else(|_| {
+            let config: ProjectConfig = serde_json::from_str(&content).unwrap_or_else(|_| {
                 ProjectConfig::new(
                     path.file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("Untitled"),
                 )
-            })
+            });
+            // Re-save to persist any new fields (e.g., project_id for older configs)
+            let updated = serde_json::to_string_pretty(&config)?;
+            std::fs::write(&config_path, updated)?;
+            config
         } else {
             let config = ProjectConfig::new(
                 path.file_name()
@@ -127,8 +131,9 @@ impl AppState {
             config
         };
 
-        // Create project
-        let project = Project::new(&project_config.name, path.to_string_lossy().to_string());
+        // Create project using the stable ID from config
+        let mut project = Project::new(&project_config.name, path.to_string_lossy().to_string());
+        project.id = project_config.project_id;
 
         // Initialize executor (if Deno is available)
         let executor = match Executor::new() {
