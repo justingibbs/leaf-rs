@@ -3,9 +3,9 @@
 //! This module provides the infrastructure for defining and executing tools
 //! that the LLM can use during conversations.
 
-pub mod card;
 pub mod filesystem;
 pub mod mcp;
+pub mod stack;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -132,12 +132,16 @@ impl ToolRegistry {
         registry.register(Arc::new(filesystem::ReadFileTool));
         registry.register(Arc::new(filesystem::WriteFileTool));
         registry.register(Arc::new(filesystem::ListDirectoryTool));
+        registry.register(Arc::new(filesystem::CreateFolderTool));
+        registry.register(Arc::new(filesystem::DeleteFileTool));
+        registry.register(Arc::new(filesystem::MoveFileTool));
 
-        // Register card tools
-        registry.register(Arc::new(card::ProposeCardTool));
-        registry.register(Arc::new(card::CreateCardNowTool));
+        // Register stack tools
+        registry.register(Arc::new(stack::ProposeStackTool));
+        registry.register(Arc::new(stack::CreateStackNowTool));
+        registry.register(Arc::new(stack::AddCardTool));
 
-        // Register MCP tools (stub)
+        // Register MCP tools
         registry.register(Arc::new(mcp::ListMcpToolsTool));
         registry.register(Arc::new(mcp::CallMcpToolTool));
 
@@ -231,11 +235,20 @@ mod tests {
     #[test]
     fn test_registry_with_defaults() {
         let registry = ToolRegistry::with_defaults();
+        // Filesystem tools
         assert!(registry.get("read_file").is_some());
         assert!(registry.get("write_file").is_some());
         assert!(registry.get("list_directory").is_some());
-        assert!(registry.get("propose_card").is_some());
-        assert!(registry.get("create_card_now").is_some());
+        assert!(registry.get("create_folder").is_some());
+        assert!(registry.get("delete_file").is_some());
+        assert!(registry.get("move_file").is_some());
+        // Stack tools
+        assert!(registry.get("propose_stack").is_some());
+        assert!(registry.get("create_stack_now").is_some());
+        assert!(registry.get("add_card").is_some());
+        // Old card tools should be gone
+        assert!(registry.get("propose_card").is_none());
+        assert!(registry.get("create_card_now").is_none());
     }
 
     #[test]

@@ -9,42 +9,37 @@ pub fn system_prompt() -> String {
 
 ## Your Role
 
-You help users create "cards" - automation units that:
-1. Watch for specific file events (new files, modified files)
-2. Run TypeScript code when triggered
-3. Process files and produce outputs
+You help users create "stacks" - automation workflows that:
+1. Watch for specific file events (new files, modified files) or run manually
+2. Execute an ordered pipeline of TypeScript "cards" (steps) when triggered
+3. Process files and produce outputs, passing data between steps
+
+A **stack** is a workflow with a trigger and one or more **cards** (steps). Simple automations use a single card; complex workflows chain multiple cards in a pipeline.
 
 ## Available Tools
 
-You have access to these tools:
-
-### Card Creation
-- `propose_card` - Preview a card before creating it (always use this first)
-- `create_card_now` - Create a card after user confirmation
+### Stack Creation
+- `propose_stack` - Preview a stack with cards before creating it (use this first)
+- `create_stack_now` - Create a stack with cards after user confirmation
+- `add_card` - Add a new card step to an existing stack
 
 ### File Operations
 - `read_file` - Read file contents from the project
-- `write_file` - Write files to the project (not .leaf/)
+- `write_file` - Write files to the project (auto-registers as artifact)
 - `list_directory` - List project contents
+- `create_folder` - Create folders in the project
+- `delete_file` - Delete a file from the project
+- `move_file` - Move or rename a file
 
-### MCP Tools (Future)
-- `list_mcp_tools` - List available external tools
-- `call_mcp_tool` - Use external tools
+### External Tools
+- `list_mcp_tools` - List available MCP tools from connected servers
+- `call_mcp_tool` - Call an MCP tool
 
-## Card Creation Workflow
-
-When users request an automation:
-
-1. **Understand the request** - Ask clarifying questions if needed
-2. **Propose the card** - Use `propose_card` to show what will be created
-3. **Wait for confirmation** - Let the user review and approve
-4. **Create the card** - Use `create_card_now` after approval
-
-IMPORTANT: Always propose cards before creating them unless the user explicitly says "create it now" or "don't show preview".
+{workflow_guidance}
 
 ## Trigger Types
 
-Cards can be triggered by:
+Stacks can be triggered by:
 
 - `file_created` - When new files appear in a watched folder
 - `file_modified` - When files are changed
@@ -90,33 +85,46 @@ console.log(info.size, info.mtime);
 
 ### Best Practices
 
-1. **Use absolute paths** - Combine `projectRoot` with relative paths
+1. **Use absolute paths** - Combine `LEAF_PROJECT_ROOT` env var with relative paths
 2. **Handle errors** - Wrap operations in try/catch
 3. **Log progress** - Use console.log for visibility
-4. **Keep it focused** - One card, one task
+4. **Keep cards focused** - Each card should do ONE task
 5. **Use async/await** - All I/O is asynchronous
+6. **Pass data between steps** - Write to stdout for the next card to read via `LEAF_PREV_STDOUT`
 
-### Example Card Code
+### Example: Single-Card Stack
 
 ```typescript
-// Parse the event
-const event = eventPayload as FileEvent;
-const inputPath = event.path;
+const projectRoot = Deno.env.get("LEAF_PROJECT_ROOT")!;
+const eventPayload = JSON.parse(Deno.env.get("LEAF_EVENT_PAYLOAD") || "{{}}")
+const inputPath = eventPayload.path;
 
-// Determine output path
 const fileName = inputPath.split("/").pop() || "output";
 const outputPath = `${{projectRoot}}/processed/${{fileName}}.json`;
 
-// Process the file
 console.log(`Processing: ${{inputPath}}`);
 const content = await Deno.readTextFile(inputPath);
 const lines = content.split("\\n");
 const result = {{ lineCount: lines.length, firstLine: lines[0] }};
 
-// Write output
 await Deno.mkdir(`${{projectRoot}}/processed`, {{ recursive: true }});
 await Deno.writeTextFile(outputPath, JSON.stringify(result, null, 2));
 console.log(`Output written to: ${{outputPath}}`);
+```
+
+### Example: Multi-Card Pipeline (Step 2+)
+
+```typescript
+const projectRoot = Deno.env.get("LEAF_PROJECT_ROOT")!;
+const prevStdout = Deno.env.get("LEAF_PREV_STDOUT") || "";
+
+// Parse output from previous step
+const prevData = JSON.parse(prevStdout);
+console.log(`Received ${{prevData.lineCount}} lines from previous step`);
+
+// Process and output for next step (or write final result)
+const result = {{ ...prevData, processed: true }};
+console.log(JSON.stringify(result));
 ```
 
 ## Security Notes
@@ -134,45 +142,90 @@ console.log(`Output written to: ${{outputPath}}`);
 - Suggest improvements or alternatives when appropriate
 - If something can't be done, explain why and offer alternatives
 "#,
+        workflow_guidance = WORKFLOW_SETUP_GUIDANCE,
         env_vars = ENV_VARS_DOC
     )
 }
 
-const ENV_VARS_DOC: &str = r#"- `LEAF_PROJECT_ROOT` - Absolute path to the project folder
-- `LEAF_EVENT_PAYLOAD` - JSON string with event details:
-  ```typescript
-  interface FileEvent {
-    path: string;      // Absolute path to the file
-    size?: number;     // File size in bytes
-    mime_type?: string; // Detected MIME type
-  }
-  ```"#;
+const WORKFLOW_SETUP_GUIDANCE: &str = r#"## Multi-Step Workflow Creation
 
-/// Get a prompt for proposing a card
-pub fn card_proposal_prompt(name: &str, description: &str) -> String {
+When a user describes a multi-step workflow:
+
+1. **PLAN first** - Propose the folder structure, stack name, trigger, and card steps
+   as a numbered list. Ask clarifying questions if the requirements are unclear.
+
+2. **BUILD step-by-step**:
+   a. Create folders first (using `create_folder` tool)
+   b. Propose the full stack with all cards (using `propose_stack`)
+
+3. **CONFIRM** - Wait for user approval before creating.
+   If the user says "just do it" or similar, use `create_stack_now` directly.
+
+4. **VERIFY** - Confirm everything is wired up and show how to test.
+
+When creating cards within a stack:
+- Each card should be focused on ONE task
+- Use `LEAF_EVENT_PAYLOAD` to access the trigger event details
+- Use `LEAF_PREV_STDOUT` to read the previous card's stdout output
+- Use `LEAF_PREV_OUTPUT_PATH` to read the previous card's full output from file
+- Write output to stdout for the next card to consume
+- For the final card, write result files to the output folder
+
+For simple automations (single step), create a stack with one card.
+The user never needs to think about the Stack/Card distinction for simple cases."#;
+
+const ENV_VARS_DOC: &str = r#"| Variable | Description |
+|----------|-------------|
+| `LEAF_PROJECT_ROOT` | Absolute path to the project folder |
+| `LEAF_CARD_ID` | This card's UUID |
+| `LEAF_STACK_ID` | Parent stack's UUID |
+| `LEAF_EXECUTION_ID` | StackExecution UUID |
+| `LEAF_EVENT_PAYLOAD` | JSON string with trigger event details |
+| `LEAF_STEP_INDEX` | 0-based position of this card in the pipeline |
+| `LEAF_PREV_STDOUT` | Previous card's stdout (truncated to 10KB) |
+| `LEAF_PREV_OUTPUT_PATH` | Path to file containing previous card's full stdout |
+
+**Event payload format:**
+```typescript
+interface FileEvent {
+  path: string;      // Absolute path to the file
+  size?: number;     // File size in bytes
+  mime_type?: string; // Detected MIME type
+}
+```
+
+**Notes:**
+- For single-card stacks, `LEAF_STEP_INDEX` is `0` and `LEAF_PREV_STDOUT`/`LEAF_PREV_OUTPUT_PATH` are empty strings
+- After each card runs, its stdout is written to `.leaf/outputs/{execution_id}/step_{position}.out`"#;
+
+/// Get a prompt for proposing a stack
+pub fn stack_proposal_prompt(name: &str, description: &str) -> String {
     format!(
-        r#"I'm proposing a new card for you to review:
+        r#"I'm proposing a new stack for you to review:
 
 **Name:** {}
 **Description:** {}
 
-Please review the card details and code below. If you'd like me to create it, just say "create it" or "looks good". If you want changes, let me know what to modify."#,
+Please review the stack details and card steps below. If you'd like me to create it, just say "create it" or "looks good". If you want changes, let me know what to modify."#,
         name, description
     )
 }
 
-/// Get a prompt for successful card creation
-pub fn card_created_prompt(name: &str, card_id: &str) -> String {
+/// Get a prompt for successful stack creation
+pub fn stack_created_prompt(name: &str, stack_id: &str, card_count: usize) -> String {
     format!(
-        r#"I've created the card "{}".
+        r#"I've created the stack "{}" with {} card step{}.
 
-**Card ID:** {}
+**Stack ID:** {}
 
-The card is now active and will trigger based on its configuration. You can:
-- Test it by adding a matching file to the watched folder
-- Disable it in the UI if you want to pause it
-- Ask me to modify it if you need changes"#,
-        name, card_id
+The stack is now active and will trigger based on its configuration. You can:
+- Test it by adding a matching file to the watched folder (for file triggers)
+- Trigger it manually from the UI (for manual triggers)
+- Ask me to modify it or add more steps"#,
+        name,
+        card_count,
+        if card_count == 1 { "" } else { "s" },
+        stack_id
     )
 }
 
@@ -185,28 +238,46 @@ mod tests {
         let prompt = system_prompt();
 
         assert!(prompt.contains("LEAF assistant"));
-        assert!(prompt.contains("propose_card"));
-        assert!(prompt.contains("create_card_now"));
+        assert!(prompt.contains("propose_stack"));
+        assert!(prompt.contains("create_stack_now"));
+        assert!(prompt.contains("add_card"));
         assert!(prompt.contains("LEAF_PROJECT_ROOT"));
         assert!(prompt.contains("LEAF_EVENT_PAYLOAD"));
+        assert!(prompt.contains("LEAF_STACK_ID"));
+        assert!(prompt.contains("LEAF_PREV_STDOUT"));
+        assert!(prompt.contains("LEAF_PREV_OUTPUT_PATH"));
+        assert!(prompt.contains("LEAF_STEP_INDEX"));
         assert!(prompt.contains("Deno"));
+        assert!(prompt.contains("create_folder"));
+        assert!(prompt.contains("delete_file"));
+        assert!(prompt.contains("move_file"));
     }
 
     #[test]
-    fn test_card_proposal_prompt() {
-        let prompt = card_proposal_prompt("CSV Parser", "Parses CSV files");
+    fn test_stack_proposal_prompt() {
+        let prompt = stack_proposal_prompt("CSV Pipeline", "Processes CSV files");
 
-        assert!(prompt.contains("CSV Parser"));
-        assert!(prompt.contains("Parses CSV files"));
+        assert!(prompt.contains("CSV Pipeline"));
+        assert!(prompt.contains("Processes CSV files"));
         assert!(prompt.contains("create it"));
     }
 
     #[test]
-    fn test_card_created_prompt() {
-        let prompt = card_created_prompt("My Card", "abc-123");
+    fn test_stack_created_prompt() {
+        let prompt = stack_created_prompt("My Stack", "abc-123", 3);
 
-        assert!(prompt.contains("My Card"));
+        assert!(prompt.contains("My Stack"));
         assert!(prompt.contains("abc-123"));
+        assert!(prompt.contains("3 card steps"));
         assert!(prompt.contains("active"));
+    }
+
+    #[test]
+    fn test_stack_created_prompt_single_card() {
+        let prompt = stack_created_prompt("Simple", "xyz", 1);
+
+        assert!(prompt.contains("1 card step."));
+        // Should NOT have the plural "steps"
+        assert!(!prompt.contains("1 card steps"));
     }
 }

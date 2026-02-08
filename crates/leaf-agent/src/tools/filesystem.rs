@@ -1,16 +1,98 @@
 //! Filesystem tools for the LEAF agent
 //!
-//! These tools allow the agent to read and write files within the project directory.
+//! These tools allow the agent to read, write, and manage files within the project directory.
 
 use async_trait::async_trait;
+use leaf_core::{Artifact, ArtifactType, LeafEvent};
+use leaf_db::ArtifactQueries;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::PathBuf;
-use tracing::{debug, warn};
+use std::path::{Path, PathBuf};
+use tauri::Emitter;
+use tracing::{debug, info, warn};
 
 use super::{Tool, ToolContext};
 use crate::error::{AgentError, AgentResult};
 use crate::json_schema;
+
+/// Register a file artifact created by the agent
+fn register_artifact(ctx: &ToolContext, relative_path: &str, full_path: &PathBuf) {
+    let filename = full_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(relative_path)
+        .to_string();
+
+    let mut artifact = Artifact::new(
+        ctx.project_id,
+        relative_path,
+        &filename,
+        ArtifactType::File,
+        "agent",
+    );
+
+    // Try to get file size
+    if let Ok(metadata) = std::fs::metadata(full_path) {
+        artifact.size_bytes = Some(metadata.len() as i64);
+    }
+
+    match ctx.db.create_artifact(&artifact) {
+        Ok(_) => {
+            debug!("Registered artifact: {}", relative_path);
+            if let Err(e) = ctx
+                .app_handle
+                .emit("leaf-event", &LeafEvent::ArtifactCreated(artifact))
+            {
+                warn!("Failed to emit ArtifactCreated event: {}", e);
+            }
+        }
+        Err(e) => {
+            // Artifact may already exist (e.g., overwrite); try updating instead
+            debug!(
+                "Could not create artifact (may already exist): {}. Updating modified.",
+                e
+            );
+            if let Err(e2) = ctx
+                .db
+                .update_artifact_modified(ctx.project_id, relative_path)
+            {
+                warn!("Failed to update artifact modified: {}", e2);
+            }
+        }
+    }
+}
+
+/// Register a directory artifact created by the agent
+fn register_directory_artifact(ctx: &ToolContext, relative_path: &str) {
+    let dirname = std::path::Path::new(relative_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(relative_path)
+        .to_string();
+
+    let artifact = Artifact::new(
+        ctx.project_id,
+        relative_path,
+        &dirname,
+        ArtifactType::Directory,
+        "agent",
+    );
+
+    match ctx.db.create_artifact(&artifact) {
+        Ok(_) => {
+            debug!("Registered directory artifact: {}", relative_path);
+            if let Err(e) = ctx
+                .app_handle
+                .emit("leaf-event", &LeafEvent::ArtifactCreated(artifact))
+            {
+                warn!("Failed to emit ArtifactCreated event: {}", e);
+            }
+        }
+        Err(e) => {
+            debug!("Could not create directory artifact (may already exist): {}", e);
+        }
+    }
+}
 
 /// Tool for reading files from the project
 pub struct ReadFileTool;
@@ -60,7 +142,7 @@ impl Tool for ReadFileTool {
         // Read the file
         let content = tokio::fs::read_to_string(&full_path)
             .await
-            .map_err(|e| AgentError::IoError(e))?;
+            .map_err(AgentError::IoError)?;
 
         // Apply line limit if specified
         let content = if let Some(max_lines) = args.max_lines {
@@ -99,7 +181,7 @@ impl Tool for WriteFileTool {
     }
 
     fn description(&self) -> &str {
-        "Write content to a file in the project directory. Cannot write to .leaf/ directory. The path should be relative to the project root."
+        "Write content to a file in the project directory. Cannot write to .leaf/ directory. The path should be relative to the project root. The file is automatically registered as an artifact."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -128,11 +210,7 @@ impl Tool for WriteFileTool {
         let args: WriteFileArgs = serde_json::from_value(args)?;
 
         // Validate path - don't allow writing to .leaf/
-        if args.path.starts_with(".leaf/") || args.path.starts_with(".leaf\\") {
-            return Err(AgentError::ToolError(
-                "Cannot write to .leaf/ directory - use card tools to create cards".to_string(),
-            ));
-        }
+        validate_not_leaf_dir(&args.path)?;
 
         // Validate and resolve path
         let full_path = validate_path(&ctx.project_path, &args.path)?;
@@ -144,18 +222,224 @@ impl Tool for WriteFileTool {
             if let Some(parent) = full_path.parent() {
                 tokio::fs::create_dir_all(parent)
                     .await
-                    .map_err(|e| AgentError::IoError(e))?;
+                    .map_err(AgentError::IoError)?;
             }
         }
 
         // Write the file
         tokio::fs::write(&full_path, &args.content)
             .await
-            .map_err(|e| AgentError::IoError(e))?;
+            .map_err(AgentError::IoError)?;
+
+        // Register as artifact
+        register_artifact(ctx, &args.path, &full_path);
 
         Ok(serde_json::json!({
             "path": args.path,
             "bytes_written": args.content.len(),
+            "success": true
+        }))
+    }
+}
+
+/// Tool for creating folders in the project
+pub struct CreateFolderTool;
+
+#[async_trait]
+impl Tool for CreateFolderTool {
+    fn name(&self) -> &str {
+        "create_folder"
+    }
+
+    fn description(&self) -> &str {
+        "Create a folder in the project directory. Creates parent directories as needed. Cannot create folders inside .leaf/."
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json_schema!(
+            description: "Create a folder in the project",
+            properties: {
+                "path" => {
+                    type: "string",
+                    description: "Folder path relative to project root (e.g., 'inbox', 'output/reports')",
+                    required: true
+                }
+            }
+        )
+    }
+
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> AgentResult<Value> {
+        let path = args
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AgentError::InvalidToolCall("path is required".to_string()))?;
+
+        validate_not_leaf_dir(path)?;
+
+        let full_path = validate_path(&ctx.project_path, path)?;
+
+        debug!("Creating folder: {}", full_path.display());
+
+        tokio::fs::create_dir_all(&full_path)
+            .await
+            .map_err(AgentError::IoError)?;
+
+        info!("Created folder: {}", path);
+
+        // Register as directory artifact
+        register_directory_artifact(ctx, path);
+
+        Ok(serde_json::json!({
+            "path": path,
+            "success": true
+        }))
+    }
+}
+
+/// Tool for deleting files from the project
+pub struct DeleteFileTool;
+
+#[async_trait]
+impl Tool for DeleteFileTool {
+    fn name(&self) -> &str {
+        "delete_file"
+    }
+
+    fn description(&self) -> &str {
+        "Delete a file from the project directory. Cannot delete files inside .leaf/."
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json_schema!(
+            description: "Delete a file from the project",
+            properties: {
+                "path" => {
+                    type: "string",
+                    description: "File path relative to project root",
+                    required: true
+                }
+            }
+        )
+    }
+
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> AgentResult<Value> {
+        let path = args
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AgentError::InvalidToolCall("path is required".to_string()))?;
+
+        validate_not_leaf_dir(path)?;
+
+        let full_path = validate_path(&ctx.project_path, path)?;
+
+        if !full_path.exists() {
+            return Err(AgentError::ToolError(format!("File not found: {}", path)));
+        }
+
+        if full_path.is_dir() {
+            return Err(AgentError::ToolError(
+                "Cannot delete a directory with delete_file. Use it only for files.".to_string(),
+            ));
+        }
+
+        debug!("Deleting file: {}", full_path.display());
+
+        tokio::fs::remove_file(&full_path)
+            .await
+            .map_err(AgentError::IoError)?;
+
+        info!("Deleted file: {}", path);
+
+        // Mark artifact as deleted
+        if let Err(e) = ctx.db.mark_artifact_deleted(ctx.project_id, path) {
+            debug!("Could not mark artifact deleted (may not exist): {}", e);
+        }
+
+        Ok(serde_json::json!({
+            "path": path,
+            "success": true
+        }))
+    }
+}
+
+/// Tool for moving/renaming files in the project
+pub struct MoveFileTool;
+
+#[async_trait]
+impl Tool for MoveFileTool {
+    fn name(&self) -> &str {
+        "move_file"
+    }
+
+    fn description(&self) -> &str {
+        "Move or rename a file within the project directory. Cannot move files into or out of .leaf/."
+    }
+
+    fn parameters_schema(&self) -> Value {
+        serde_json::json!({
+            "type": "object",
+            "description": "Move or rename a file",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": "Current path relative to project root"
+                },
+                "destination": {
+                    "type": "string",
+                    "description": "New path relative to project root"
+                }
+            },
+            "required": ["source", "destination"]
+        })
+    }
+
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> AgentResult<Value> {
+        let source = args
+            .get("source")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AgentError::InvalidToolCall("source is required".to_string()))?;
+        let destination = args
+            .get("destination")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AgentError::InvalidToolCall("destination is required".to_string()))?;
+
+        validate_not_leaf_dir(source)?;
+        validate_not_leaf_dir(destination)?;
+
+        let source_path = validate_path(&ctx.project_path, source)?;
+        let dest_path = validate_path(&ctx.project_path, destination)?;
+
+        if !source_path.exists() {
+            return Err(AgentError::ToolError(format!(
+                "Source file not found: {}",
+                source
+            )));
+        }
+
+        // Create parent directories for destination if needed
+        if let Some(parent) = dest_path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(AgentError::IoError)?;
+        }
+
+        debug!("Moving {} -> {}", source_path.display(), dest_path.display());
+
+        tokio::fs::rename(&source_path, &dest_path)
+            .await
+            .map_err(AgentError::IoError)?;
+
+        info!("Moved {} -> {}", source, destination);
+
+        // Update artifact tracking: mark old as deleted, register new
+        if let Err(e) = ctx.db.mark_artifact_deleted(ctx.project_id, source) {
+            debug!("Could not mark source artifact deleted: {}", e);
+        }
+        register_artifact(ctx, destination, &dest_path);
+
+        Ok(serde_json::json!({
+            "source": source,
+            "destination": destination,
             "success": true
         }))
     }
@@ -237,8 +521,18 @@ impl Tool for ListDirectoryTool {
     }
 }
 
+/// Validate that a path doesn't point into .leaf/
+fn validate_not_leaf_dir(path: &str) -> AgentResult<()> {
+    if path.starts_with(".leaf/") || path.starts_with(".leaf\\") || path == ".leaf" {
+        return Err(AgentError::ToolError(
+            "Cannot modify .leaf/ directory - use stack/card tools instead".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Validate that a path is within the project directory and resolve it
-fn validate_path(project_path: &PathBuf, relative_path: &str) -> AgentResult<PathBuf> {
+fn validate_path(project_path: &Path, relative_path: &str) -> AgentResult<PathBuf> {
     // Normalize the path
     let normalized = relative_path
         .replace('\\', "/")
@@ -251,7 +545,7 @@ fn validate_path(project_path: &PathBuf, relative_path: &str) -> AgentResult<Pat
     // Canonicalize to resolve any .. or symlinks
     // Note: The file might not exist yet for write operations, so we canonicalize the parent
     let canonical = if full_path.exists() {
-        full_path.canonicalize().map_err(|e| AgentError::IoError(e))?
+        full_path.canonicalize().map_err(AgentError::IoError)?
     } else {
         // For new files, check the parent directory
         let parent = full_path.parent().ok_or_else(|| {
@@ -264,7 +558,7 @@ fn validate_path(project_path: &PathBuf, relative_path: &str) -> AgentResult<Pat
         } else {
             parent
                 .canonicalize()
-                .map_err(|e| AgentError::IoError(e))?
+                .map_err(AgentError::IoError)?
                 .join(full_path.file_name().unwrap_or_default())
         }
     };
@@ -272,7 +566,7 @@ fn validate_path(project_path: &PathBuf, relative_path: &str) -> AgentResult<Pat
     // Verify the path is within the project
     let project_canonical = project_path
         .canonicalize()
-        .unwrap_or_else(|_| project_path.clone());
+        .unwrap_or_else(|_| project_path.to_path_buf());
 
     if !canonical.starts_with(&project_canonical) {
         warn!(
@@ -290,8 +584,8 @@ fn validate_path(project_path: &PathBuf, relative_path: &str) -> AgentResult<Pat
 
 /// List directory entries recursively or non-recursively
 async fn list_directory_entries(
-    dir_path: &PathBuf,
-    project_root: &PathBuf,
+    dir_path: &Path,
+    project_root: &Path,
     recursive: bool,
     include_hidden: bool,
 ) -> AgentResult<Vec<FileEntry>> {
@@ -299,9 +593,9 @@ async fn list_directory_entries(
 
     let mut read_dir = tokio::fs::read_dir(dir_path)
         .await
-        .map_err(|e| AgentError::IoError(e))?;
+        .map_err(AgentError::IoError)?;
 
-    while let Some(entry) = read_dir.next_entry().await.map_err(|e| AgentError::IoError(e))? {
+    while let Some(entry) = read_dir.next_entry().await.map_err(AgentError::IoError)? {
         let name = entry.file_name().to_string_lossy().to_string();
 
         // Skip hidden files unless requested
@@ -316,7 +610,7 @@ async fn list_directory_entries(
             .to_string_lossy()
             .to_string();
 
-        let metadata = entry.metadata().await.map_err(|e| AgentError::IoError(e))?;
+        let metadata = entry.metadata().await.map_err(AgentError::IoError)?;
         let is_dir = metadata.is_dir();
         let size = if is_dir { None } else { Some(metadata.len()) };
 
@@ -379,6 +673,14 @@ mod tests {
 
         let result = validate_path(&project_path, "subdir/file.txt");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_not_leaf_dir() {
+        assert!(validate_not_leaf_dir("inbox/file.txt").is_ok());
+        assert!(validate_not_leaf_dir("output/result.csv").is_ok());
+        assert!(validate_not_leaf_dir(".leaf/programs/test").is_err());
+        assert!(validate_not_leaf_dir(".leaf").is_err());
     }
 
     #[tokio::test]
